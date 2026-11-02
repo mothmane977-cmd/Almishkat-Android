@@ -29,12 +29,31 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools'
-          
+
       - name: Install Android SDK
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Extract project
         run: unzip -q Almishkat-Android-starter.zip
+
+      - name: Fix Java and Kotlin targets
+        working-directory: Almishkat-Android
+        run: |
+          cat >> app/build.gradle.kts <<'GRADLE'
+
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+
+          tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          GRADLE
 
       - name: Build APK
         working-directory: Almishkat-Android

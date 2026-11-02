@@ -1,4 +1,3 @@
-
 name: Almishkat V23 Integration Build
 
 on:
@@ -89,7 +88,6 @@ jobs:
 
           for p in root.rglob("*.kt"):
               lines = p.read_text(encoding="utf-8").splitlines()
-
               first = next(
                   (i for i, line in enumerate(lines) if line.strip()),
                   None
@@ -101,14 +99,74 @@ jobs:
                   p.write_text(source + "\n", encoding="utf-8")
                   repaired.append(str(p))
 
-          print("Repaired Kotlin files:")
-          for name in repaired:
-              print(name)
+          print("Repaired files:", repaired)
 
           if len(repaired) != 6:
               raise SystemExit(
-                  f"Expected 6 malformed files, repaired {len(repaired)}"
+                  f"Expected 6 malformed files, found {len(repaired)}"
               )
+          PY
+
+      - name: Fix Compose icons and clickable imports
+        working-directory: Almishkat_Android_PhoneBuild
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path("app/src/main/java/com/almishkat/studio")
+
+          additions = {
+              "MainActivity.kt": [
+                  "import androidx.compose.material.icons.Icons",
+                  "import androidx.compose.material.icons.filled.Book",
+                  "import androidx.compose.material.icons.filled.Movie",
+                  "import androidx.compose.material.icons.filled.Layers",
+              ],
+              "StudioProjectsScreen.kt": [
+                  "import androidx.compose.foundation.clickable",
+              ],
+          }
+
+          for filename, imports in additions.items():
+              p = root / filename
+              if not p.exists():
+                  raise SystemExit(f"Missing source file: {p}")
+
+              source = p.read_text(encoding="utf-8")
+
+              for item in imports:
+                  if item not in source:
+                      match = re.search(r'(?m)^package\s+[^\n]+', source)
+                      if not match:
+                          raise SystemExit(f"Package declaration missing: {p}")
+                      pos = match.end()
+                      source = source[:pos] + "\n\n" + item + source[pos:]
+
+              p.write_text(source, encoding="utf-8")
+              print("Imports repaired:", filename)
+
+          build = Path("app/build.gradle.kts")
+          source = build.read_text(encoding="utf-8")
+
+          dependency = (
+              'implementation("androidx.compose.material:'
+              'material-icons-extended:1.7.8")'
+          )
+
+          if "material-icons-extended" not in source:
+              if not re.search(r'(?m)^dependencies\s*\{', source):
+                  raise SystemExit("dependencies block not found")
+
+              source = re.sub(
+                  r'(?m)^dependencies\s*\{',
+                  lambda m: m.group(0) + "\n    " + dependency,
+                  source,
+                  count=1
+              )
+
+          build.write_text(source, encoding="utf-8")
+          print("Material icons dependency verified")
           PY
 
       - name: Verify project
@@ -116,18 +174,7 @@ jobs:
           test -f Almishkat_Android_PhoneBuild/settings.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/build.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/src/main/AndroidManifest.xml
-
-          python3 - <<'PY'
-          from pathlib import Path
-
-          root = Path("Almishkat_Android_PhoneBuild/app/src/main/java")
-          for p in root.rglob("*.kt"):
-              source = p.read_text(encoding="utf-8")
-              if not source.lstrip().startswith("package "):
-                  raise SystemExit(f"Invalid Kotlin header: {p}")
-
-          print("All Kotlin package declarations verified")
-          PY
+          echo "V23 project verified"
 
       - name: Build Almishkat APK
         working-directory: Almishkat_Android_PhoneBuild

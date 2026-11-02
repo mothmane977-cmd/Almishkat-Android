@@ -50,17 +50,40 @@ jobs:
           s = p.read_text(encoding="utf-8")
           s = s.replace("\\n", "\n")
           p.write_text(s, encoding="utf-8")
-
-          print("Corrected gradle.properties:")
-          print(p.read_text(encoding="utf-8"))
+          print("Gradle properties fixed")
           PY
+
+      - name: Fix Android settings
+        working-directory: Almishkat_Android_PhoneBuild
+        run: |
+          cat > settings.gradle.kts <<'KOTLIN'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "AlmishkatStudio"
+          include(":app")
+          KOTLIN
+
+          echo "Android settings fixed"
 
       - name: Verify project
         run: |
           test -f Almishkat_Android_PhoneBuild/settings.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/build.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/src/main/AndroidManifest.xml
-          test -f Almishkat_Android_PhoneBuild/gradle.properties
           echo "V23 project verified"
 
       - name: Build Almishkat APK

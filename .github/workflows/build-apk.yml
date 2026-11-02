@@ -33,19 +33,35 @@ jobs:
         with:
           packages: 'platform-tools'
 
-      - name: Install Android SDK 36
+      - name: Install Android SDK
         run: |
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Extract V23 Integration
         run: unzip -q Almishkat-V23-Integration-01.zip
 
-      - name: Verify project structure
+      - name: Fix Gradle properties
+        working-directory: Almishkat_Android_PhoneBuild
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("gradle.properties")
+          s = p.read_text(encoding="utf-8")
+          s = s.replace("\\n", "\n")
+          p.write_text(s, encoding="utf-8")
+
+          print("Corrected gradle.properties:")
+          print(p.read_text(encoding="utf-8"))
+          PY
+
+      - name: Verify project
         run: |
           test -f Almishkat_Android_PhoneBuild/settings.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/build.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/src/main/AndroidManifest.xml
-          echo "Almishkat V23 project verified"
+          test -f Almishkat_Android_PhoneBuild/gradle.properties
+          echo "V23 project verified"
 
       - name: Build Almishkat APK
         working-directory: Almishkat_Android_PhoneBuild
@@ -58,3 +74,4 @@ jobs:
           path: Almishkat_Android_PhoneBuild/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+          

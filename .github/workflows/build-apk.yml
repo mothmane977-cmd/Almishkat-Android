@@ -36,7 +36,7 @@ jobs:
         run: |
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Extract V23 Integration
+      - name: Extract V23
         run: unzip -q Almishkat-V23-Integration-01.zip
 
       - name: Fix Gradle properties
@@ -49,7 +49,7 @@ jobs:
           s = p.read_text(encoding="utf-8")
           s = s.replace("\\n", "\n")
           p.write_text(s, encoding="utf-8")
-          print("Gradle properties repaired")
+          print("Gradle properties fixed")
           PY
 
       - name: Fix Android settings
@@ -76,7 +76,7 @@ jobs:
           include(":app")
           KOTLIN
 
-      - name: Repair Kotlin source files
+      - name: Repair malformed Kotlin files
         working-directory: Almishkat_Android_PhoneBuild
         run: |
           python3 - <<'PY'
@@ -99,7 +99,7 @@ jobs:
                   p.write_text(source + "\n", encoding="utf-8")
                   repaired.append(str(p))
 
-          print("Repaired files:", repaired)
+          print("Repaired:", repaired)
 
           if len(repaired) != 6:
               raise SystemExit(
@@ -107,7 +107,7 @@ jobs:
               )
           PY
 
-      - name: Fix Compose icons and clickable imports
+      - name: Fix exact Compose imports
         working-directory: Almishkat_Android_PhoneBuild
         run: |
           python3 - <<'PY'
@@ -118,10 +118,9 @@ jobs:
 
           additions = {
               "MainActivity.kt": [
-                  "import androidx.compose.material.icons.Icons",
-                  "import androidx.compose.material.icons.filled.Book",
-                  "import androidx.compose.material.icons.filled.Movie",
-                  "import androidx.compose.material.icons.filled.Layers",
+                  "import androidx.compose.material.icons.rounded.Book",
+                  "import androidx.compose.material.icons.rounded.Movie",
+                  "import androidx.compose.material.icons.rounded.Layers",
               ],
               "StudioProjectsScreen.kt": [
                   "import androidx.compose.foundation.clickable",
@@ -130,43 +129,50 @@ jobs:
 
           for filename, imports in additions.items():
               p = root / filename
+
               if not p.exists():
-                  raise SystemExit(f"Missing source file: {p}")
+                  raise SystemExit(f"Missing file: {p}")
 
               source = p.read_text(encoding="utf-8")
 
               for item in imports:
                   if item not in source:
-                      match = re.search(r'(?m)^package\s+[^\n]+', source)
+                      match = re.search(
+                          r'(?m)^package\s+[^\n]+',
+                          source
+                      )
+
                       if not match:
-                          raise SystemExit(f"Package declaration missing: {p}")
+                          raise SystemExit(
+                              f"Package declaration missing: {filename}"
+                          )
+
                       pos = match.end()
-                      source = source[:pos] + "\n\n" + item + source[pos:]
+                      source = (
+                          source[:pos] + "\n\n" + item + source[pos:]
+                      )
 
               p.write_text(source, encoding="utf-8")
-              print("Imports repaired:", filename)
+              print("Fixed imports:", filename)
 
-          build = Path("app/build.gradle.kts")
-          source = build.read_text(encoding="utf-8")
+          main = (root / "MainActivity.kt").read_text(encoding="utf-8")
 
-          dependency = (
-              'implementation("androidx.compose.material:'
-              'material-icons-extended:1.7.8")'
+          for name in ("Book", "Movie", "Layers"):
+              if f"Icons.Rounded.{name}" not in main:
+                  raise SystemExit(
+                      f"Expected Icons.Rounded.{name} usage not found"
+                  )
+
+          build = Path("app/build.gradle.kts").read_text(
+              encoding="utf-8"
           )
 
-          if "material-icons-extended" not in source:
-              if not re.search(r'(?m)^dependencies\s*\{', source):
-                  raise SystemExit("dependencies block not found")
-
-              source = re.sub(
-                  r'(?m)^dependencies\s*\{',
-                  lambda m: m.group(0) + "\n    " + dependency,
-                  source,
-                  count=1
+          if "material-icons-extended" not in build:
+              raise SystemExit(
+                  "Original material-icons-extended dependency missing"
               )
 
-          build.write_text(source, encoding="utf-8")
-          print("Material icons dependency verified")
+          print("Compose icons dependency verified")
           PY
 
       - name: Verify project
@@ -174,11 +180,18 @@ jobs:
           test -f Almishkat_Android_PhoneBuild/settings.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/build.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/src/main/AndroidManifest.xml
-          echo "V23 project verified"
+
+          echo "V23 structure verified"
 
       - name: Build Almishkat APK
         working-directory: Almishkat_Android_PhoneBuild
-        run: gradle --no-daemon :app:assembleDebug
+        run: |
+          gradle --no-daemon :app:assembleDebug
+
+      - name: Verify APK
+        run: |
+          test -s Almishkat_Android_PhoneBuild/app/build/outputs/apk/debug/app-debug.apk
+          echo "APK generated successfully"
 
       - name: Upload Almishkat APK
         uses: actions/upload-artifact@v4

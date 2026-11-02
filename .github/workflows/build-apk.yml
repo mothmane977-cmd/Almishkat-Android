@@ -1,4 +1,4 @@
-name: Almishkat V23 Integration Build
+name: Almishkat V23 Crash Fix Build
 
 on:
   workflow_dispatch:
@@ -107,7 +107,7 @@ jobs:
               )
           PY
 
-      - name: Fix exact Compose imports
+      - name: Fix Compose imports
         working-directory: Almishkat_Android_PhoneBuild
         run: |
           python3 - <<'PY'
@@ -129,7 +129,6 @@ jobs:
 
           for filename, imports in additions.items():
               p = root / filename
-
               if not p.exists():
                   raise SystemExit(f"Missing file: {p}")
 
@@ -138,41 +137,107 @@ jobs:
               for item in imports:
                   if item not in source:
                       match = re.search(
-                          r'(?m)^package\s+[^\n]+',
+                          r'(?m)^\s*package\s+[^\n]+',
                           source
                       )
-
                       if not match:
                           raise SystemExit(
                               f"Package declaration missing: {filename}"
                           )
 
                       pos = match.end()
-                      source = (
-                          source[:pos] + "\n\n" + item + source[pos:]
-                      )
+                      source = source[:pos] + "\n\n" + item + source[pos:]
 
               p.write_text(source, encoding="utf-8")
-              print("Fixed imports:", filename)
-
-          main = (root / "MainActivity.kt").read_text(encoding="utf-8")
-
-          for name in ("Book", "Movie", "Layers"):
-              if f"Icons.Rounded.{name}" not in main:
-                  raise SystemExit(
-                      f"Expected Icons.Rounded.{name} usage not found"
-                  )
+              print("Imports fixed:", filename)
 
           build = Path("app/build.gradle.kts").read_text(
               encoding="utf-8"
           )
 
           if "material-icons-extended" not in build:
-              raise SystemExit(
-                  "Original material-icons-extended dependency missing"
+              raise SystemExit("Compose icons dependency missing")
+
+          print("Compose dependencies verified")
+          PY
+
+      - name: Fix SQLite startup crash
+        working-directory: Almishkat_Android_PhoneBuild
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path(
+              "app/src/main/java/com/almishkat/studio/"
+              "QuranLocalDatabase.kt"
+          )
+
+          source = p.read_text(encoding="utf-8")
+
+          old = '''        createSceneBackgroundTable(db)
+                  createStudioScenesTable(db)
+                  db.execSQL("ALTER TABLE scene_layers ADD COLUMN scene_id TEXT")
+                  db.execSQL("ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT")'''
+
+          new = '''        createSceneBackgroundTable(db)
+                  createStudioScenesTable(db)'''
+
+          if old not in source:
+              # Match the actual indentation independently.
+              lines = source.splitlines()
+              start = next(
+                  (i for i, line in enumerate(lines)
+                   if "createSceneBackgroundTable(db)" in line),
+                  None
               )
 
-          print("Compose icons dependency verified")
+              if start is None:
+                  raise SystemExit("Database creation block not found")
+
+              block = "\n".join(lines[start:start + 4])
+
+              if (
+                  "createStudioScenesTable(db)" not in block
+                  or "ALTER TABLE scene_layers ADD COLUMN scene_id TEXT" not in block
+                  or "ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT" not in block
+              ):
+                  raise SystemExit(
+                      "Unexpected database creation block; refusing unsafe patch"
+                  )
+
+              lines[start:start + 4] = [
+                  lines[start],
+                  lines[start + 1]
+              ]
+              source = "\n".join(lines) + "\n"
+          else:
+              source = source.replace(old, new, 1)
+
+          p.write_text(source, encoding="utf-8")
+
+          # Verify onCreate no longer adds columns already created.
+          on_create = source.split(
+              "override fun onUpgrade", 1
+          )[0]
+
+          if "ALTER TABLE scene_layers ADD COLUMN scene_id TEXT" in on_create:
+              raise SystemExit("Duplicate scene_layers migration remains")
+
+          if "ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT" in on_create:
+              raise SystemExit("Duplicate scene_backgrounds migration remains")
+
+          # Preserve upgrade migrations for existing databases.
+          on_upgrade = source.split(
+              "override fun onUpgrade", 1
+          )[1]
+
+          if "ALTER TABLE scene_layers ADD COLUMN scene_id TEXT" not in on_upgrade:
+              raise SystemExit("Existing scene_layers migration was lost")
+
+          if "ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT" not in on_upgrade:
+              raise SystemExit("Existing scene_backgrounds migration was lost")
+
+          print("SQLite startup crash fixed")
           PY
 
       - name: Verify project
@@ -181,9 +246,9 @@ jobs:
           test -f Almishkat_Android_PhoneBuild/app/build.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/src/main/AndroidManifest.xml
 
-          echo "V23 structure verified"
+          echo "Project structure verified"
 
-      - name: Build Almishkat APK
+      - name: Build APK
         working-directory: Almishkat_Android_PhoneBuild
         run: |
           gradle --no-daemon :app:assembleDebug
@@ -193,10 +258,10 @@ jobs:
           test -s Almishkat_Android_PhoneBuild/app/build/outputs/apk/debug/app-debug.apk
           echo "APK generated successfully"
 
-      - name: Upload Almishkat APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Almishkat-V23-Integration-01-APK
+          name: Almishkat-V23-Crash-Fix-APK
           path: Almishkat_Android_PhoneBuild/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

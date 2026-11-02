@@ -50,7 +50,7 @@ jobs:
           s = p.read_text(encoding="utf-8")
           s = s.replace("\\n", "\n")
           p.write_text(s, encoding="utf-8")
-          print("Gradle properties fixed")
+          print("Gradle properties repaired")
           PY
 
       - name: Fix Android settings
@@ -77,14 +77,57 @@ jobs:
           include(":app")
           KOTLIN
 
-          echo "Android settings fixed"
+      - name: Repair Kotlin source files
+        working-directory: Almishkat_Android_PhoneBuild
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          root = Path("app/src/main/java")
+          repaired = []
+
+          for p in root.rglob("*.kt"):
+              lines = p.read_text(encoding="utf-8").splitlines()
+
+              first = next(
+                  (i for i, line in enumerate(lines) if line.strip()),
+                  None
+              )
+
+              if first is not None and lines[first].strip() == "\\":
+                  del lines[first]
+                  source = textwrap.dedent("\n".join(lines)).lstrip()
+                  p.write_text(source + "\n", encoding="utf-8")
+                  repaired.append(str(p))
+
+          print("Repaired Kotlin files:")
+          for name in repaired:
+              print(name)
+
+          if len(repaired) != 6:
+              raise SystemExit(
+                  f"Expected 6 malformed files, repaired {len(repaired)}"
+              )
+          PY
 
       - name: Verify project
         run: |
           test -f Almishkat_Android_PhoneBuild/settings.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/build.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/src/main/AndroidManifest.xml
-          echo "V23 project verified"
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("Almishkat_Android_PhoneBuild/app/src/main/java")
+          for p in root.rglob("*.kt"):
+              source = p.read_text(encoding="utf-8")
+              if not source.lstrip().startswith("package "):
+                  raise SystemExit(f"Invalid Kotlin header: {p}")
+
+          print("All Kotlin package declarations verified")
+          PY
 
       - name: Build Almishkat APK
         working-directory: Almishkat_Android_PhoneBuild

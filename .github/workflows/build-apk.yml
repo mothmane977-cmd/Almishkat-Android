@@ -1,4 +1,5 @@
-name: Almishkat V23 SQLite Fix Build
+
+name: Almishkat V24 Export Button Build
 
 on:
   workflow_dispatch:
@@ -36,14 +37,9 @@ jobs:
         run: |
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Extract SQLite Fix
+      - name: Extract V24 source
         run: |
-          unzip -q Almishkat-V23-SQLite-Fix.zip
-
-      - name: Set project directory
-        run: |
-          test -d Almishkat_Android_PhoneBuild
-          echo "PROJECT_DIR=Almishkat_Android_PhoneBuild" >> "$GITHUB_ENV"
+          unzip -q Almishkat-V24-Export-Button-Source.zip
 
       - name: Fix Gradle properties
         working-directory: Almishkat_Android_PhoneBuild
@@ -52,9 +48,15 @@ jobs:
           from pathlib import Path
 
           p = Path("gradle.properties")
+
+          if not p.exists():
+              raise SystemExit("gradle.properties not found")
+
           s = p.read_text(encoding="utf-8")
           s = s.replace("\\n", "\n")
           p.write_text(s, encoding="utf-8")
+
+          print("Gradle properties repaired:")
           print(p.read_text(encoding="utf-8"))
           PY
 
@@ -82,177 +84,51 @@ jobs:
           include(":app")
           KOTLIN
 
-      - name: Repair malformed Kotlin files
+      - name: Verify V24 project files
+        run: |
+          test -f Almishkat_Android_PhoneBuild/settings.gradle.kts
+          test -f Almishkat_Android_PhoneBuild/build.gradle.kts
+          test -f Almishkat_Android_PhoneBuild/gradle.properties
+          test -f Almishkat_Android_PhoneBuild/app/build.gradle.kts
+          test -f Almishkat_Android_PhoneBuild/app/src/main/AndroidManifest.xml
+
+          test -f Almishkat_Android_PhoneBuild/app/src/main/java/com/almishkat/studio/MainActivity.kt
+
+          test -f Almishkat_Android_PhoneBuild/app/src/main/java/com/almishkat/studio/VideoExportScreen.kt
+
+          test -f Almishkat_Android_PhoneBuild/app/src/main/java/com/almishkat/studio/VideoExportEngine.kt
+
+          test -f Almishkat_Android_PhoneBuild/app/src/main/java/com/almishkat/studio/VideoExportModels.kt
+
+          echo "All V24 export files verified"
+
+      - name: Verify export entry
         working-directory: Almishkat_Android_PhoneBuild
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import textwrap
-
-          root = Path("app/src/main/java")
-          repaired = []
-
-          for p in root.rglob("*.kt"):
-              lines = p.read_text(encoding="utf-8").splitlines()
-
-              first = next(
-                  (i for i, line in enumerate(lines) if line.strip()),
-                  None
-              )
-
-              if first is not None and lines[first].strip() == "\\":
-                  del lines[first]
-                  source = textwrap.dedent("\n".join(lines)).lstrip()
-                  p.write_text(source + "\n", encoding="utf-8")
-                  repaired.append(str(p))
-
-          print("Repaired files:", repaired)
-
-          if len(repaired) != 6:
-              raise SystemExit(
-                  f"Expected 6 malformed files, found {len(repaired)}"
-              )
-          PY
-
-      - name: Fix Compose imports
-        working-directory: Almishkat_Android_PhoneBuild
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
 
           root = Path("app/src/main/java/com/almishkat/studio")
 
-          additions = {
-              "MainActivity.kt": [
-                  "import androidx.compose.material.icons.rounded.Book",
-                  "import androidx.compose.material.icons.rounded.Movie",
-                  "import androidx.compose.material.icons.rounded.Layers",
-              ],
-              "StudioProjectsScreen.kt": [
-                  "import androidx.compose.foundation.clickable",
-              ],
-          }
+          main = (root / "MainActivity.kt").read_text(encoding="utf-8")
+          screen = (root / "VideoExportScreen.kt").read_text(encoding="utf-8")
+          engine = (root / "VideoExportEngine.kt").read_text(encoding="utf-8")
 
-          for filename, imports in additions.items():
-              p = root / filename
+          if "VideoExportScreen" not in main:
+              raise SystemExit(
+                  "VideoExportScreen is not referenced in MainActivity"
+              )
 
-              if not p.exists():
-                  raise SystemExit(f"Missing file: {p}")
+          if "VideoExportEngine" not in screen:
+              raise SystemExit(
+                  "Export screen does not reference the export engine"
+              )
 
-              source = p.read_text(encoding="utf-8")
+          if len(engine.strip()) < 1000:
+              raise SystemExit("Video export engine appears incomplete")
 
-              for item in imports:
-                  if item not in source:
-                      match = re.search(
-                          r'(?m)^package\s+[^\n]+',
-                          source
-                      )
-
-                      if not match:
-                          raise SystemExit(
-                              f"Package declaration missing: {filename}"
-                          )
-
-                      pos = match.end()
-                      source = source[:pos] + "\n\n" + item + source[pos:]
-
-              p.write_text(source, encoding="utf-8")
-              print("Imports fixed:", filename)
-
+          print("V24 export integration checks passed")
           PY
-
-      - name: Fix SQLite database creation
-        working-directory: Almishkat_Android_PhoneBuild
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          p = Path(
-              "app/src/main/java/com/almishkat/studio/"
-              "QuranLocalDatabase.kt"
-          )
-
-          source = p.read_text(encoding="utf-8")
-
-          start = source.find("override fun onCreate")
-          end = source.find("override fun onUpgrade", start)
-
-          if start < 0 or end < 0:
-              raise SystemExit("Database lifecycle methods not found")
-
-          before = source[:start]
-          on_create = source[start:end]
-          after = source[end:]
-
-          lines = on_create.splitlines()
-          fixed = []
-
-          for line in lines:
-              if (
-                  "ALTER TABLE scene_layers ADD COLUMN scene_id TEXT"
-                  in line
-              ):
-                  continue
-
-              if (
-                  "ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT"
-                  in line
-              ):
-                  continue
-
-              fixed.append(line)
-
-          source = before + "\n".join(fixed) + "\n" + after
-
-          p.write_text(source, encoding="utf-8")
-
-          # Ensure migrations remain in onUpgrade.
-          upgrade = source[source.find("override fun onUpgrade"):]
-
-          if "ALTER TABLE scene_layers ADD COLUMN scene_id TEXT" not in upgrade:
-              raise SystemExit("scene_layers migration missing")
-
-          if "ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT" not in upgrade:
-              raise SystemExit("scene_backgrounds migration missing")
-
-          print("SQLite creation and migration verified")
-          PY
-
-      - name: Verify Quran dataset query
-        working-directory: Almishkat_Android_PhoneBuild
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          p = Path(
-              "app/src/main/java/com/almishkat/studio/"
-              "QuranLocalDatabase.kt"
-          )
-
-          s = p.read_text(encoding="utf-8")
-
-          required = [
-              "fun getDatasetStatus",
-              "SELECT source_name, source_version, ayah_count",
-              "WHERE riwayah = ?"
-          ]
-
-          for item in required:
-              if item not in s:
-                  raise SystemExit("Missing SQL fix: " + item)
-
-          print("Quran dataset query verified")
-          PY
-
-      - name: Verify project structure
-        run: |
-          test -f Almishkat_Android_PhoneBuild/settings.gradle.kts
-          test -f Almishkat_Android_PhoneBuild/app/build.gradle.kts
-          test -f Almishkat_Android_PhoneBuild/app/src/main/AndroidManifest.xml
-          test -f Almishkat_Android_PhoneBuild/app/src/main/java/com/almishkat/studio/QuranLocalDatabase.kt
-
-          echo "Project structure verified"
 
       - name: Build Almishkat APK
         working-directory: Almishkat_Android_PhoneBuild
@@ -262,12 +138,13 @@ jobs:
       - name: Verify APK
         run: |
           test -s Almishkat_Android_PhoneBuild/app/build/outputs/apk/debug/app-debug.apk
+
           echo "APK generated successfully"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Almishkat-V23-SQLite-Fix-APK
+          name: Almishkat-V24-Export-Button-APK
           path: Almishkat_Android_PhoneBuild/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

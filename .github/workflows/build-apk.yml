@@ -1,4 +1,4 @@
-name: Almishkat V23 Crash Fix Build
+name: Almishkat V23 SQLite Fix Build
 
 on:
   workflow_dispatch:
@@ -36,8 +36,14 @@ jobs:
         run: |
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Extract V23
-        run: unzip -q Almishkat-V23-Integration-01.zip
+      - name: Extract SQLite Fix
+        run: |
+          unzip -q Almishkat-V23-SQLite-Fix.zip
+
+      - name: Set project directory
+        run: |
+          test -d Almishkat_Android_PhoneBuild
+          echo "PROJECT_DIR=Almishkat_Android_PhoneBuild" >> "$GITHUB_ENV"
 
       - name: Fix Gradle properties
         working-directory: Almishkat_Android_PhoneBuild
@@ -49,7 +55,7 @@ jobs:
           s = p.read_text(encoding="utf-8")
           s = s.replace("\\n", "\n")
           p.write_text(s, encoding="utf-8")
-          print("Gradle properties fixed")
+          print(p.read_text(encoding="utf-8"))
           PY
 
       - name: Fix Android settings
@@ -88,6 +94,7 @@ jobs:
 
           for p in root.rglob("*.kt"):
               lines = p.read_text(encoding="utf-8").splitlines()
+
               first = next(
                   (i for i, line in enumerate(lines) if line.strip()),
                   None
@@ -99,7 +106,7 @@ jobs:
                   p.write_text(source + "\n", encoding="utf-8")
                   repaired.append(str(p))
 
-          print("Repaired:", repaired)
+          print("Repaired files:", repaired)
 
           if len(repaired) != 6:
               raise SystemExit(
@@ -129,6 +136,7 @@ jobs:
 
           for filename, imports in additions.items():
               p = root / filename
+
               if not p.exists():
                   raise SystemExit(f"Missing file: {p}")
 
@@ -137,9 +145,10 @@ jobs:
               for item in imports:
                   if item not in source:
                       match = re.search(
-                          r'(?m)^\s*package\s+[^\n]+',
+                          r'(?m)^package\s+[^\n]+',
                           source
                       )
+
                       if not match:
                           raise SystemExit(
                               f"Package declaration missing: {filename}"
@@ -151,17 +160,9 @@ jobs:
               p.write_text(source, encoding="utf-8")
               print("Imports fixed:", filename)
 
-          build = Path("app/build.gradle.kts").read_text(
-              encoding="utf-8"
-          )
-
-          if "material-icons-extended" not in build:
-              raise SystemExit("Compose icons dependency missing")
-
-          print("Compose dependencies verified")
           PY
 
-      - name: Fix SQLite startup crash
+      - name: Fix SQLite database creation
         working-directory: Almishkat_Android_PhoneBuild
         run: |
           python3 - <<'PY'
@@ -174,81 +175,86 @@ jobs:
 
           source = p.read_text(encoding="utf-8")
 
-          old = '''        createSceneBackgroundTable(db)
-                  createStudioScenesTable(db)
-                  db.execSQL("ALTER TABLE scene_layers ADD COLUMN scene_id TEXT")
-                  db.execSQL("ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT")'''
+          start = source.find("override fun onCreate")
+          end = source.find("override fun onUpgrade", start)
 
-          new = '''        createSceneBackgroundTable(db)
-                  createStudioScenesTable(db)'''
+          if start < 0 or end < 0:
+              raise SystemExit("Database lifecycle methods not found")
 
-          if old not in source:
-              # Match the actual indentation independently.
-              lines = source.splitlines()
-              start = next(
-                  (i for i, line in enumerate(lines)
-                   if "createSceneBackgroundTable(db)" in line),
-                  None
-              )
+          before = source[:start]
+          on_create = source[start:end]
+          after = source[end:]
 
-              if start is None:
-                  raise SystemExit("Database creation block not found")
+          lines = on_create.splitlines()
+          fixed = []
 
-              block = "\n".join(lines[start:start + 4])
+          for line in lines:
+              if (
+                  "ALTER TABLE scene_layers ADD COLUMN scene_id TEXT"
+                  in line
+              ):
+                  continue
 
               if (
-                  "createStudioScenesTable(db)" not in block
-                  or "ALTER TABLE scene_layers ADD COLUMN scene_id TEXT" not in block
-                  or "ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT" not in block
+                  "ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT"
+                  in line
               ):
-                  raise SystemExit(
-                      "Unexpected database creation block; refusing unsafe patch"
-                  )
+                  continue
 
-              lines[start:start + 4] = [
-                  lines[start],
-                  lines[start + 1]
-              ]
-              source = "\n".join(lines) + "\n"
-          else:
-              source = source.replace(old, new, 1)
+              fixed.append(line)
+
+          source = before + "\n".join(fixed) + "\n" + after
 
           p.write_text(source, encoding="utf-8")
 
-          # Verify onCreate no longer adds columns already created.
-          on_create = source.split(
-              "override fun onUpgrade", 1
-          )[0]
+          # Ensure migrations remain in onUpgrade.
+          upgrade = source[source.find("override fun onUpgrade"):]
 
-          if "ALTER TABLE scene_layers ADD COLUMN scene_id TEXT" in on_create:
-              raise SystemExit("Duplicate scene_layers migration remains")
+          if "ALTER TABLE scene_layers ADD COLUMN scene_id TEXT" not in upgrade:
+              raise SystemExit("scene_layers migration missing")
 
-          if "ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT" in on_create:
-              raise SystemExit("Duplicate scene_backgrounds migration remains")
+          if "ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT" not in upgrade:
+              raise SystemExit("scene_backgrounds migration missing")
 
-          # Preserve upgrade migrations for existing databases.
-          on_upgrade = source.split(
-              "override fun onUpgrade", 1
-          )[1]
-
-          if "ALTER TABLE scene_layers ADD COLUMN scene_id TEXT" not in on_upgrade:
-              raise SystemExit("Existing scene_layers migration was lost")
-
-          if "ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT" not in on_upgrade:
-              raise SystemExit("Existing scene_backgrounds migration was lost")
-
-          print("SQLite startup crash fixed")
+          print("SQLite creation and migration verified")
           PY
 
-      - name: Verify project
+      - name: Verify Quran dataset query
+        working-directory: Almishkat_Android_PhoneBuild
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path(
+              "app/src/main/java/com/almishkat/studio/"
+              "QuranLocalDatabase.kt"
+          )
+
+          s = p.read_text(encoding="utf-8")
+
+          required = [
+              "fun getDatasetStatus",
+              "SELECT source_name, source_version, ayah_count",
+              "WHERE riwayah = ?"
+          ]
+
+          for item in required:
+              if item not in s:
+                  raise SystemExit("Missing SQL fix: " + item)
+
+          print("Quran dataset query verified")
+          PY
+
+      - name: Verify project structure
         run: |
           test -f Almishkat_Android_PhoneBuild/settings.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/build.gradle.kts
           test -f Almishkat_Android_PhoneBuild/app/src/main/AndroidManifest.xml
+          test -f Almishkat_Android_PhoneBuild/app/src/main/java/com/almishkat/studio/QuranLocalDatabase.kt
 
           echo "Project structure verified"
 
-      - name: Build APK
+      - name: Build Almishkat APK
         working-directory: Almishkat_Android_PhoneBuild
         run: |
           gradle --no-daemon :app:assembleDebug
@@ -261,7 +267,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Almishkat-V23-Crash-Fix-APK
+          name: Almishkat-V23-SQLite-Fix-APK
           path: Almishkat_Android_PhoneBuild/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

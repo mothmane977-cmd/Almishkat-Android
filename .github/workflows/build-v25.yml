@@ -1,0 +1,109 @@
+name: Almishkat V25 Quran Scroll Fix Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Verify V25 archive
+        run: |
+          test -s Almishkat-V25-Quran-Scroll-Fix-Source.zip
+          unzip -t Almishkat-V25-Quran-Scroll-Fix-Source.zip
+
+      - name: Extract V25 source
+        run: |
+          unzip -q Almishkat-V25-Quran-Scroll-Fix-Source.zip
+          test -d Almishkat_Android_PhoneBuild
+
+      - name: Fix Gradle properties
+        working-directory: Almishkat_Android_PhoneBuild
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("gradle.properties")
+          if not p.exists():
+              raise SystemExit("gradle.properties missing")
+          s = p.read_text(encoding="utf-8")
+          p.write_text(s.replace("\\n", "\n"), encoding="utf-8")
+          PY
+
+      - name: Fix Android settings
+        working-directory: Almishkat_Android_PhoneBuild
+        run: |
+          cat > settings.gradle.kts <<'KOTLIN'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "AlmishkatStudio"
+          include(":app")
+          KOTLIN
+
+      - name: Verify project
+        run: |
+          test -f Almishkat_Android_PhoneBuild/app/build.gradle.kts
+          test -f Almishkat_Android_PhoneBuild/app/src/main/AndroidManifest.xml
+          test -f Almishkat_Android_PhoneBuild/app/src/main/java/com/almishkat/studio/QuranReaderScreen.kt
+          test -f Almishkat_Android_PhoneBuild/app/src/main/java/com/almishkat/studio/QuranLocalDatabase.kt
+
+      - name: Verify Quran reader
+        working-directory: Almishkat_Android_PhoneBuild
+        run: |
+          grep -q 'fun QuranReaderScreen' app/src/main/java/com/almishkat/studio/QuranReaderScreen.kt
+          echo "Quran reader source verified"
+
+      - name: Build APK
+        working-directory: Almishkat_Android_PhoneBuild
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Verify APK
+        run: |
+          test -s Almishkat_Android_PhoneBuild/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload V25 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Almishkat-V25-Quran-Scroll-Fix-APK
+          path: Almishkat_Android_PhoneBuild/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

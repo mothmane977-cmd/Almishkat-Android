@@ -75,7 +75,36 @@ jobs:
         shell: bash
         run: |
           set -e
-          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses
+
+          python3 - <<'PY'
+          import os
+          import subprocess
+
+          sdkmanager = os.environ["SDKMANAGER"]
+          sdk_root = os.environ["SDK_ROOT"]
+
+          command = [
+              sdkmanager,
+              f"--sdk_root={sdk_root}",
+              "--licenses"
+          ]
+
+          print("Accepting Android SDK licenses...")
+
+          result = subprocess.run(
+              command,
+              input="y\n" * 200,
+              text=True,
+              check=False
+          )
+
+          if result.returncode != 0:
+              raise SystemExit(
+                  f"SDK license acceptance failed: {result.returncode}"
+              )
+
+          print("Android SDK licenses accepted successfully.")
+          PY
 
       - name: Install Android SDK packages
         shell: bash

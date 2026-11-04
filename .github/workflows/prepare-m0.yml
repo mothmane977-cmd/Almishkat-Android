@@ -1,0 +1,303 @@
+
+name: Prepare Almishkat Studio - M0
+
+on:
+  push:
+    branches:
+      - feature/M0-FOUND-01-structure
+    paths:
+      - .github/workflows/prepare-m0.yml
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: almishkat-m0-preparation
+  cancel-in-progress: false
+
+jobs:
+  prepare-project:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/M0-FOUND-01-structure
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify source archive
+        shell: bash
+        run: |
+          test -f Almishkat-V25-Quran-Scroll-Fix-Source.zip
+          sha256sum Almishkat-V25-Quran-Scroll-Fix-Source.zip
+
+      - name: Extract and organize V25 source
+        shell: bash
+        run: |
+          python - <<'PY'
+          import zipfile
+          import tempfile
+          import shutil
+          from pathlib import Path
+
+          repo = Path.cwd()
+          source = repo / "Almishkat-V25-Quran-Scroll-Fix-Source.zip"
+
+          if not source.is_file():
+              raise SystemExit("ERROR: V25 source ZIP not found.")
+
+          temp = Path(tempfile.mkdtemp(prefix="almishkat-m0-"))
+
+          try:
+              with zipfile.ZipFile(source) as z:
+                  bad = z.testzip()
+
+                  if bad:
+                      raise SystemExit(
+                          f"Corrupt ZIP member: {bad}"
+                      )
+
+                  root = temp.resolve()
+
+                  for member in z.infolist():
+                      target = (temp / member.filename).resolve()
+
+                      if not target.is_relative_to(root):
+                          raise SystemExit(
+                              f"Unsafe ZIP path: {member.filename}"
+                          )
+
+                  z.extractall(temp)
+
+              candidates = [
+                  p.parent
+                  for p in temp.rglob("settings.gradle.kts")
+                  if (p.parent / "app" / "build.gradle.kts").is_file()
+              ]
+
+              if len(candidates) != 1:
+                  raise SystemExit(
+                      "Expected exactly one Android project root. "
+                      f"Found: {len(candidates)}"
+                  )
+
+              project = candidates[0]
+
+              print(f"Selected V25 source: {project}")
+
+              # Copy source files without deleting existing repository data.
+              for item in project.iterdir():
+                  if item.name in {
+                      ".git",
+                      ".github",
+                      "archive"
+                  }:
+                      continue
+
+                  destination = repo / item.name
+
+                  if destination.exists():
+                      raise SystemExit(
+                          "Refusing to overwrite existing path: "
+                          f"{destination.name}"
+                      )
+
+                  if item.is_dir():
+                      shutil.copytree(item, destination)
+                  else:
+                      shutil.copy2(item, destination)
+
+              # Preserve historical source archives.
+              snapshots = (
+                  repo / "archive" / "source-snapshots"
+              )
+              snapshots.mkdir(
+                  parents=True,
+                  exist_ok=True
+              )
+
+              for item in list(repo.glob("*.zip")):
+                  destination = snapshots / item.name
+
+                  if destination.exists():
+                      raise SystemExit(
+                          f"Archive already exists: {item.name}"
+                      )
+
+                  shutil.move(str(item), str(destination))
+
+              # Preserve the legacy workflow directory.
+              old_workflow = repo / "github" / "workflows"
+
+              if old_workflow.exists():
+                  legacy = (
+                      repo / "archive" / "legacy-workflows"
+                  )
+                  legacy.mkdir(
+                      parents=True,
+                      exist_ok=True
+                  )
+
+                  destination = legacy / "github-workflows"
+
+                  if destination.exists():
+                      raise SystemExit(
+                          "Legacy workflow archive already exists."
+                      )
+
+                  shutil.copytree(
+                      old_workflow,
+                      destination
+                  )
+
+                  shutil.rmtree(repo / "github")
+
+              # Organize root Markdown documentation.
+              docs = repo / "docs"
+              docs.mkdir(exist_ok=True)
+
+              for item in list(repo.glob("*.md")):
+                  if item.name == "README.md":
+                      continue
+
+                  destination = docs / item.name
+
+                  if destination.exists():
+                      raise SystemExit(
+                          f"Documentation collision: {item.name}"
+                      )
+
+                  shutil.move(
+                      str(item),
+                      str(destination)
+                  )
+
+              # Normalize literal newline escapes if present.
+              gp = repo / "gradle.properties"
+
+              if gp.is_file():
+                  content = gp.read_text(
+                      encoding="utf-8"
+                  )
+
+                  if "\\n" in content:
+                      gp.write_text(
+                          content.replace("\\n", "\n"),
+                          encoding="utf-8"
+                      )
+
+              # Create organizational folders.
+              descriptions = {
+                  "core": "Reserved for shared core components.",
+                  "data": "Reserved for data-layer components.",
+                  "domain": "Reserved for domain models and use cases.",
+                  "ui": "Reserved for presentation components.",
+                  "scripts": "Repository maintenance scripts."
+              }
+
+              for name, description in descriptions.items():
+                  folder = repo / name
+                  folder.mkdir(exist_ok=True)
+
+                  readme = folder / "README.md"
+
+                  if not readme.exists():
+                      readme.write_text(
+                          f"# {name}/\n\n{description}\n",
+                          encoding="utf-8"
+                      )
+
+              # Create bilingual project README.
+              readme = repo / "README.md"
+
+              if not readme.exists():
+                  readme.write_text(
+                      "# Almishkat Studio | المشكاة ستوديو\n\n"
+                      "## English\n"
+                      "Native Android Quran Studio built with "
+                      "Kotlin and Jetpack Compose.\n\n"
+                      "## العربية\n"
+                      "تطبيق أندرويد متخصص في إنشاء الفيديوهات "
+                      "القرآنية.\n\n"
+                      "See docs/ for project documentation.\n",
+                      encoding="utf-8"
+                  )
+
+              # Record the baseline.
+              report = (
+                  docs / "M0_FOUND_01_BASELINE_AR.md"
+              )
+
+              report.write_text(
+                  "# سجل خط الأساس — M0-FOUND-01\n\n"
+                  "- المصدر: V25 Quran Scroll Fix.\n"
+                  "- تم استخراج المشروع إلى جذر المستودع.\n"
+                  "- تم الاحتفاظ بالإصدارات السابقة في archive/.\n"
+                  "- تم تنظيم الوثائق في docs/.\n"
+                  "- المجلدات core/data/domain/ui/scripts "
+                  "تمهيدية فقط.\n"
+                  "- لم يتم تنفيذ إصلاحات المرحلة الأولى.\n"
+                  "- لم يتم اعتماد البناء بعد.\n",
+                  encoding="utf-8"
+              )
+
+              print("Project organization completed.")
+
+          finally:
+              shutil.rmtree(
+                  temp,
+                  ignore_errors=True
+              )
+          PY
+
+      - name: Verify project structure
+        shell: bash
+        run: |
+          set -e
+
+          test -f settings.gradle.kts
+          test -f app/build.gradle.kts
+          test -f README.md
+          test -d docs
+          test -d archive/source-snapshots
+          test -d core
+          test -d data
+          test -d domain
+          test -d ui
+          test -d scripts
+
+          echo "Project structure checks passed."
+
+      - name: Check Git changes
+        run: |
+          git status --short
+
+      - name: Commit organized project
+        shell: bash
+        run: |
+          set -e
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m \
+              "M0-FOUND-01: Organize Almishkat Studio source"
+
+            git push origin \
+              HEAD:feature/M0-FOUND-01-structure
+          fi
+          

@@ -35,7 +35,7 @@ class QuranDatasetException(message: String) : Exception(message)
 
 /** Offline-first SQLite storage with physically separate tables per riwayah. */
 class QuranLocalDatabase(context: Context) :
-    SQLiteOpenHelper(context, "almishkat_quran.db", null, 10) {
+    SQLiteOpenHelper(context, "almishkat_quran.db", null, 11) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""
@@ -80,40 +80,113 @@ class QuranLocalDatabase(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // Migrations are idempotent: older installs may already contain some newer columns.
         if (oldVersion < 2) createTimingTable(db)
         if (oldVersion < 3) createProjectsTable(db)
         if (oldVersion < 4) createAudioClipTable(db)
+
+        // Versions 1-3 may have created the base audio table immediately before this step.
+        // Add only columns that are genuinely missing; never fail on a duplicate column.
         if (oldVersion < 5) migrateAudioClipLinks(db)
+
         if (oldVersion < 6) createSceneLayersTable(db)
         if (oldVersion < 7) createSceneBackgroundTable(db)
-        if (oldVersion == 7) db.execSQL("ALTER TABLE scene_backgrounds ADD COLUMN video_uri TEXT")
-        if (oldVersion < 10) {
-            if (oldVersion >= 6) db.execSQL("ALTER TABLE scene_layers ADD COLUMN scene_id TEXT")
-            if (oldVersion >= 7) db.execSQL("ALTER TABLE scene_backgrounds ADD COLUMN scene_id TEXT")
-            db.execSQL("""
-                CREATE TABLE scene_backgrounds_v10 (
-                    project_id TEXT NOT NULL,
-                    image_uri TEXT,
-                    video_uri TEXT,
-                    scene_id TEXT,
-                    preset TEXT NOT NULL DEFAULT 'emerald',
-                    motion_enabled INTEGER NOT NULL DEFAULT 1,
-                    updated_at INTEGER NOT NULL,
-                    PRIMARY KEY(project_id, scene_id)
-                )
-            """.trimIndent())
-            db.execSQL("""
-                INSERT INTO scene_backgrounds_v10
-                (project_id,image_uri,video_uri,scene_id,preset,motion_enabled,updated_at)
-                SELECT project_id,image_uri,video_uri,scene_id,preset,motion_enabled,updated_at
-                FROM scene_backgrounds
-            """.trimIndent())
-            db.execSQL("DROP TABLE scene_backgrounds")
-            db.execSQL("ALTER TABLE scene_backgrounds_v10 RENAME TO scene_backgrounds")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_scene_layers_scene ON scene_layers(scene_id, z_order)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_scene_backgrounds_scene ON scene_backgrounds(scene_id)")
+
+        // Bring every supported historical schema to the current shape safely.
+        ensureColumn(db, "audio_clip_selections", "project_id", "TEXT")
+        ensureColumn(db, "audio_clip_selections", "riwayah", "TEXT")
+        ensureColumn(db, "audio_clip_selections", "surah_no", "INTEGER")
+        ensureColumn(db, "audio_clip_selections", "ayah_no", "INTEGER")
+        ensureColumn(db, "scene_layers", "scene_id", "TEXT")
+        ensureColumn(db, "scene_backgrounds", "video_uri", "TEXT")
+        ensureColumn(db, "scene_backgrounds", "scene_id", "TEXT")
+
+        // Version 10 changed the background key from project-only to project + scene.
+        // Rebuild pre-v10 tables so one project can safely own multiple scene backgrounds.
+        if (oldVersion < 10) rebuildSceneBackgroundsForV10(db)
+
+        createTimingTable(db)
+        createProjectsTable(db)
+        createAudioClipTable(db)
+        createSceneLayersTable(db)
+        createSceneBackgroundTable(db)
+        createStudioScenesTable(db)
+        ensureSceneBackgroundConstraints(db)
+
+        // Quran tables and imported ayah data are intentionally never dropped or rebuilt.
+    }
+
+    private fun tableExists(db: SQLiteDatabase, table: String): Boolean {
+        db.rawQuery(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+            arrayOf(table)
+        ).use { return it.moveToFirst() }
+    }
+
+    private fun columnExists(db: SQLiteDatabase, table: String, column: String): Boolean {
+        if (!tableExists(db, table)) return false
+        db.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
+            val nameIndex = cursor.getColumnIndex("name")
+            while (cursor.moveToNext()) {
+                if (nameIndex >= 0 && cursor.getString(nameIndex) == column) return true
+            }
         }
-        // Explicit migrations only. Never drop Quran data during an upgrade.
+        return false
+    }
+
+    private fun ensureColumn(db: SQLiteDatabase, table: String, column: String, definition: String) {
+        if (tableExists(db, table) && !columnExists(db, table, column)) {
+            db.execSQL("ALTER TABLE $table ADD COLUMN $column $definition")
+        }
+    }
+
+    private fun rebuildSceneBackgroundsForV10(db: SQLiteDatabase) {
+        if (!tableExists(db, "scene_backgrounds")) {
+            createSceneBackgroundTable(db)
+            return
+        }
+        db.execSQL("DROP TABLE IF EXISTS scene_backgrounds_v10")
+        db.execSQL("""
+            CREATE TABLE scene_backgrounds_v10 (
+                project_id TEXT NOT NULL,
+                image_uri TEXT,
+                video_uri TEXT,
+                scene_id TEXT,
+                preset TEXT NOT NULL DEFAULT 'emerald',
+                motion_enabled INTEGER NOT NULL DEFAULT 1,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY(project_id, scene_id)
+            )
+        """.trimIndent())
+        db.execSQL("""
+            INSERT INTO scene_backgrounds_v10
+                (project_id, image_uri, video_uri, scene_id, preset, motion_enabled, updated_at)
+            SELECT project_id, image_uri, video_uri, scene_id, preset, motion_enabled, updated_at
+            FROM scene_backgrounds
+        """.trimIndent())
+        db.execSQL("DROP TABLE scene_backgrounds")
+        db.execSQL("ALTER TABLE scene_backgrounds_v10 RENAME TO scene_backgrounds")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_scene_backgrounds_scene ON scene_backgrounds(scene_id)")
+    }
+
+    private fun ensureSceneBackgroundConstraints(db: SQLiteDatabase) {
+        if (!tableExists(db, "scene_backgrounds")) return
+        // SQLite treats NULL values as distinct in a composite UNIQUE/PRIMARY KEY.
+        // Keep the newest project-wide background before enforcing one row per project.
+        db.execSQL("""
+            DELETE FROM scene_backgrounds
+            WHERE scene_id IS NULL
+              AND rowid <> (
+                  SELECT latest.rowid
+                  FROM scene_backgrounds AS latest
+                  WHERE latest.project_id = scene_backgrounds.project_id
+                    AND latest.scene_id IS NULL
+                  ORDER BY latest.updated_at DESC, latest.rowid DESC
+                  LIMIT 1
+              )
+        """.trimIndent())
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_scene_background_project_default ON scene_backgrounds(project_id) WHERE scene_id IS NULL")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_scene_background_project_scene ON scene_backgrounds(project_id, scene_id) WHERE scene_id IS NOT NULL")
     }
 
     private fun createProjectsTable(db: SQLiteDatabase) {
@@ -153,10 +226,14 @@ class QuranLocalDatabase(context: Context) :
     }
 
     private fun migrateAudioClipLinks(db: SQLiteDatabase) {
-        db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN project_id TEXT")
-        db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN riwayah TEXT")
-        db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN surah_no INTEGER")
-        db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN ayah_no INTEGER")
+        if (!tableExists(db, "audio_clip_selections")) {
+            createAudioClipTable(db)
+            return
+        }
+        ensureColumn(db, "audio_clip_selections", "project_id", "TEXT")
+        ensureColumn(db, "audio_clip_selections", "riwayah", "TEXT")
+        ensureColumn(db, "audio_clip_selections", "surah_no", "INTEGER")
+        ensureColumn(db, "audio_clip_selections", "ayah_no", "INTEGER")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_audio_clip_project ON audio_clip_selections(project_id)")
     }
 
@@ -267,7 +344,16 @@ class QuranLocalDatabase(context: Context) :
     }
 
     fun deleteStudioScene(sceneId: String) {
-        writableDatabase.delete("studio_scenes", "scene_id=?", arrayOf(sceneId))
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("scene_layers", "scene_id=?", arrayOf(sceneId))
+            db.delete("scene_backgrounds", "scene_id=?", arrayOf(sceneId))
+            db.delete("studio_scenes", "scene_id=?", arrayOf(sceneId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     fun replaceStudioSceneOrder(projectId: String, orderedIds: List<String>) {
@@ -300,6 +386,7 @@ class QuranLocalDatabase(context: Context) :
             )
         """.trimIndent())
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_scene_backgrounds_scene ON scene_backgrounds(scene_id)")
+        ensureSceneBackgroundConstraints(db)
     }
 
     fun saveSceneBackground(background: SceneBackground) {
@@ -398,7 +485,7 @@ class QuranLocalDatabase(context: Context) :
     fun listSceneLayers(projectId: String): List<StudioSceneLayer> {
         val result = mutableListOf<StudioSceneLayer>()
         readableDatabase.rawQuery(
-            "SELECT layer_id,project_id,layer_type,title,content,start_ms,end_ms,position_x,position_y,font_size,visible,z_order,created_at,updated_at FROM scene_layers WHERE project_id=? ORDER BY z_order, created_at",
+            "SELECT layer_id,project_id,layer_type,title,content,start_ms,end_ms,position_x,position_y,font_size,visible,z_order,created_at,updated_at,scene_id FROM scene_layers WHERE project_id=? ORDER BY z_order, created_at",
             arrayOf(projectId)
         ).use { c ->
             while (c.moveToNext()) {
@@ -410,7 +497,8 @@ class QuranLocalDatabase(context: Context) :
                     positionX = c.getFloat(7), positionY = c.getFloat(8),
                     fontSize = c.getFloat(9), visible = c.getInt(10) == 1,
                     zOrder = c.getInt(11), createdAt = c.getLong(12),
-                    updatedAt = c.getLong(13)
+                    updatedAt = c.getLong(13),
+                    sceneId = if (c.isNull(14)) null else c.getString(14)
                 )
             }
         }
@@ -505,7 +593,18 @@ class QuranLocalDatabase(context: Context) :
     }
 
     fun deleteProject(projectId: String) {
-        writableDatabase.delete("studio_projects", "project_id=?", arrayOf(projectId))
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("scene_layers", "project_id=?", arrayOf(projectId))
+            db.delete("scene_backgrounds", "project_id=?", arrayOf(projectId))
+            db.delete("studio_scenes", "project_id=?", arrayOf(projectId))
+            db.delete("audio_clip_selections", "project_id=?", arrayOf(projectId))
+            db.delete("studio_projects", "project_id=?", arrayOf(projectId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     private fun createTimingTable(db: SQLiteDatabase) {

@@ -1,0 +1,21 @@
+# M0-FOUND-02 temporary negative test. Never merge this workflow.
+name: M0-FOUND-02 Required Check Negative Test
+
+on:
+  pull_request:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  negative-test:
+    name: Clean Clone Verification and APK Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deliberately fail to verify required-check enforcement
+        run: |
+          echo "EXPECTED FAILURE: M0-FOUND-02 protected-branch negative test."
+          exit 1

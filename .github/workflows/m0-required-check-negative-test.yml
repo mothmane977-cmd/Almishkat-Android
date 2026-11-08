@@ -1,4 +1,5 @@
 # M0-FOUND-02 temporary negative test. Never merge this workflow.
+# Retest after PR #1 merged into develop; intentional failure remains unchanged.
 name: M0-FOUND-02 Required Check Negative Test
 
 on:

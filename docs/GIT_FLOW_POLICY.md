@@ -63,7 +63,7 @@ The active GitHub ruleset **Almishkat Protected Branches** targets `main` and `d
 
 **Approved solo-developer exception (2026-11-08):** the project owner is currently the sole developer and explicitly removed mandatory independent human review from M0-FOUND-02 acceptance criteria. Required approving reviews remain **0**. Documented self-review and mandatory CI checks remain required. Reconsider independent review when a qualified reviewer joins; do not describe self-review as independent review.
 
-**CI verification (2026-11-08):** the build workflow's `pull_request` trigger is present on `feature/M0-FOUND-01-structure`; PR #1 and push builds succeeded after isolating concurrency groups by event and branch. The temporary negative-test PR #2 produced a failed required check and GitHub reported `blocked`, demonstrating enforcement on `develop`. The workflow is not yet part of the protected target branches' committed baseline; verify future PR execution after approved integration. Do not merge PR #2.
+**CI verification (2026-11-08):** PR #1 merged into `develop` at `4f3d59bbe07f1656bfc38ca2db1b8319c04bca89`, including the clean-clone build workflow. The subsequent PR #2 retest triggered both the real build (run `42478032686`, **success**) and deliberately failing negative test (run `42478032677`, **failure**); GitHub reported PR #2 as `blocked`. PR #2 was subsequently **closed without merging**. The temporary test branch still exists and should be removed separately when a supported, authorized deletion mechanism is available. These results establish required-check behavior for PRs targeting `develop`; they do not establish identical post-integration behavior for `main`.
 
 ## 6. Releases and tags
 
@@ -92,4 +92,4 @@ M0-FOUND-02 may be closed only after:
 - Branch protections and merge routes are tested with auditable evidence.
 - No direct modifications to `main` are performed during setup.
 
-**Status:** Policy updated by explicit project-owner decision on 2026-11-08. **M0-FOUND-02 remains open** pending any remaining acceptance evidence and authorized integration; the independent human-review requirement is no longer a blocker.
+**Status (2026-11-08):** The documented Git Flow policy, solo-developer exception, protected-branch ruleset, successful build check, deliberately failing check, and PR-based integration into `develop` have been verified. PR #1 was merged; PR #2 was closed unmerged. The temporary test branch remains for later authorized cleanup. **M0-FOUND-02 technical acceptance evidence is complete for the verified `develop` flow; formal closure is pending approval of this documentation PR.** No changes to `main` were made. The verification of a future release PR into `main` is deferred to the applicable release workflow; no release merge is authorized by this record.

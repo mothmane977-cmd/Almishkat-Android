@@ -1,0 +1,3 @@
+ALMISHKAT connector permission check
+2026-11-08
+Non-executable test file. No application source changes.

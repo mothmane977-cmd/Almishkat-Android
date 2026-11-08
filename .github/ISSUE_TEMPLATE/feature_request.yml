@@ -1,0 +1,61 @@
+name: "اقتراح ميزة | Feature Request"
+description: "اقتراح موثق للمراجعة، وليس تصريحاً بالتنفيذ | Proposed change, not approval to implement"
+title: "[FEATURE] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **تقييد النطاق:** تقديم اقتراح لا يعني اعتماده. لا تُنفّذ ميزة جديدة أثناء مرحلة M1 أو خارج خارطة الطريق إلا بقرار صريح من مالك المشروع.
+        تجنّب الأسرار والبيانات الشخصية والمحتوى غير المرخّص. البلاغات الأمنية تتبع [SECURITY.md](../../SECURITY.md).
+  - type: input
+    id: roadmap
+    attributes:
+      label: "المرحلة أو المهمة المقترحة / Roadmap reference"
+      description: "حدد المهمة المعتمدة، أو اكتب: اقتراح غير معتمد"
+      placeholder: "M4-... / اقتراح غير معتمد"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: "المشكلة أو الحاجة / Problem statement"
+      description: "اشرح الحاجة الفعلية دون افتراض حل تقني مسبق"
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "الحل المقترح / Proposal"
+      description: "صف السلوك المطلوب وحدود النطاق"
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "البدائل / Alternatives considered"
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: "معايير قبول قابلة للاختبار / Acceptance criteria"
+      description: "ماذا يجب أن يثبت الاختبار لإغلاق المهمة؟"
+      placeholder: |
+        - [ ] معيار قابل للتحقق 1
+        - [ ] معيار قابل للتحقق 2
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: "الأثر والمخاطر / Impact and risks"
+      description: "التوافق مع البيانات القديمة، سلامة النص القرآني، التراخيص، الأداء، تجربة المستخدم"
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: "الإقرار / Acknowledgment"
+      options:
+        - label: "أقر أن هذا اقتراح للمراجعة فقط ولن يُنفّذ قبل اعتماده وفق خارطة الطريق"
+          required: true

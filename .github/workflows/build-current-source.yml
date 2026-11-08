@@ -233,6 +233,20 @@ jobs:
           set -e
           gradle --no-daemon --stacktrace :app:assembleDebug
 
+      - name: Audit resolved dependency trees (temporary M0-FOUND-05 check)
+        working-directory: clean-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:dependencies --configuration debugRuntimeClasspath > /tmp/almishkat-debug-runtime-dependencies.txt
+          gradle --no-daemon :app:dependencies --configuration releaseRuntimeClasspath > /tmp/almishkat-release-runtime-dependencies.txt
+          echo "M0_FOUND_05_DEBUG_RUNTIME_BEGIN"
+          cat /tmp/almishkat-debug-runtime-dependencies.txt
+          echo "M0_FOUND_05_DEBUG_RUNTIME_END"
+          echo "M0_FOUND_05_RELEASE_RUNTIME_BEGIN"
+          cat /tmp/almishkat-release-runtime-dependencies.txt
+          echo "M0_FOUND_05_RELEASE_RUNTIME_END"
+
       - name: Verify generated APK
         working-directory: clean-source
         shell: bash

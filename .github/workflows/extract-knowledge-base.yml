@@ -3,6 +3,11 @@ name: Extract ALMISHKAT Knowledge Base
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/M0-DB-V11-MIGRATION
+    paths:
+      - '.github/workflows/extract-knowledge-base.yml'
 
 permissions:
   contents: write

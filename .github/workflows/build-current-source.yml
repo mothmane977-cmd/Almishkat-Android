@@ -19,6 +19,11 @@ on:
       - "settings.gradle.kts"
       - ".github/workflows/build-current-source.yml"
 
+  pull_request:
+    branches:
+      - main
+      - develop
+
   workflow_dispatch:
 
 permissions:

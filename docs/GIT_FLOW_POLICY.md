@@ -12,7 +12,7 @@
 - Do not push changes directly to protected branches.
 - Develop changes on separate branches and submit Pull Requests (PRs).
 - Never merge when mandatory checks fail or remain pending.
-- Require review according to the approved review policy; do not represent a missing independent review as completed.
+- Require a documented technical self-review and mandatory CI checks before merging. Independent human review is recommended when a qualified reviewer is available, but is not mandatory during solo development.
 - Do not publish a release without explicit project-owner approval.
 - Do not introduce features outside the approved roadmap or advance to M1 before M0 closure.
 - Never commit secrets or unlicensed resources.
@@ -38,9 +38,9 @@ Branch creation does not authorize bypassing protections. Existing work branches
 3. Provide test evidence and document any unresolved limitations.
 4. Require all configured status checks to pass.
 5. Resolve review discussions before approval and merge.
-6. Obtain independent review when the qualified reviewer and an enforceable approval workflow are available. Until then, **independent-review compliance remains open** and must not be reported as satisfied.
+6. During solo development, document a technical self-review of the diff, risks, test evidence, and acceptance criteria. Independent human review is recommended when a qualified reviewer is available, but is **not an acceptance criterion for M0-FOUND-02**.
 7. Reject secrets, unlicensed assets, unauthorized scope changes, and unexplained data migrations.
-8. Do not merge solely because a check passed: required human approval and project release decisions are separate gates.
+8. Do not merge solely because a check passed: documented technical review and explicit project-owner authorization for merge or release remain separate gates.
 
 ## 4. Merge routes
 
@@ -61,9 +61,9 @@ The active GitHub ruleset **Almishkat Protected Branches** targets `main` and `d
 - No branch deletions and no force pushes.
 - No bypass actors in the ruleset.
 
-**Known gap:** required approving reviews are currently set to **0**. A qualified independent reviewer and an enforceable review policy must be arranged and verified before this acceptance criterion can be closed. Avoid prematurely requiring an unavailable reviewer and deadlocking development.
+**Approved solo-developer exception (2026-11-08):** the project owner is currently the sole developer and explicitly removed mandatory independent human review from M0-FOUND-02 acceptance criteria. Required approving reviews remain **0**. Documented self-review and mandatory CI checks remain required. Reconsider independent review when a qualified reviewer joins; do not describe self-review as independent review.
 
-**CI limitation:** the build workflow's `pull_request` trigger was added on `feature/M0-FOUND-01-structure` for PRs targeting `main` and `develop`. A successful PR check was observed; confirm that the relevant workflow is present and reliably runs on each protected target branch before treating enforcement as comprehensively validated. The workflow's concurrency configuration also warrants review.
+**CI verification (2026-11-08):** the build workflow's `pull_request` trigger is present on `feature/M0-FOUND-01-structure`; PR #1 and push builds succeeded after isolating concurrency groups by event and branch. The temporary negative-test PR #2 produced a failed required check and GitHub reported `blocked`, demonstrating enforcement on `develop`. The workflow is not yet part of the protected target branches' committed baseline; verify future PR execution after approved integration. Do not merge PR #2.
 
 ## 6. Releases and tags
 
@@ -88,8 +88,8 @@ M0-FOUND-02 may be closed only after:
 - This policy is reviewed, saved, and linked from contribution documentation when that document is prepared.
 - GitHub settings are verified against this policy.
 - Required checks are shown to pass and to block an intentionally failing test PR without merging it.
-- Independent review requirements are resolved and enforced or explicitly recorded as an unmet acceptance criterion.
+- The project-owner-approved solo-developer review exception is documented; independent human review is optional for M0-FOUND-02, while documented technical self-review remains mandatory.
 - Branch protections and merge routes are tested with auditable evidence.
 - No direct modifications to `main` are performed during setup.
 
-**Status:** Policy approved and recorded; **M0-FOUND-02 remains open** pending the above evidence.
+**Status:** Policy updated by explicit project-owner decision on 2026-11-08. **M0-FOUND-02 remains open** pending any remaining acceptance evidence and authorized integration; the independent human-review requirement is no longer a blocker.

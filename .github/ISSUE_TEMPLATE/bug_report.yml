@@ -1,0 +1,90 @@
+name: "بلاغ خطأ | Bug Report"
+description: "توثيق خلل قابل لإعادة الإنتاج في المشكاة ستوديو | Report a reproducible defect"
+title: "[BUG] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        شكراً على البلاغ. يرجى مراجعة البلاغات السابقة قبل الإنشاء.
+        **الأمان والخصوصية:** لا تنشر كلمات مرور أو مفاتيح أو بيانات شخصية أو تفاصيل ثغرات أمنية علناً. اتبع [SECURITY.md](../../SECURITY.md)، واطلب قناة خاصة آمنة إذا لم يكن الإبلاغ الخاص مفعّلاً.
+        **سلامة القرآن:** اذكر الرواية والمصدر والإصدار إن كان الخلل متعلقاً بالنص أو التوقيت، دون نسخ مواد غير مرخّصة.
+  - type: input
+    id: task
+    attributes:
+      label: "مرجع المهمة / Roadmap issue"
+      description: "مثال: M1-FIX-03 أو M0-FOUND-06؛ اكتب غير محدد إن لم توجد مهمة معتمدة"
+      placeholder: "M1-FIX-XX / غير محدد"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: "المكوّن المتأثر / Area"
+      options:
+        - "قاعدة البيانات / Database"
+        - "سلامة النص القرآني والروايات / Quran content and riwayat"
+        - "الصوت والمزامنة / Audio and synchronization"
+        - "التحرير والتصدير / Editor and export"
+        - "الواجهة / UI"
+        - "البناء والأمان / Build and security"
+        - "أخرى / Other"
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: "الخطورة المبدئية / Severity (unconfirmed)"
+      options:
+        - "حرج / Critical"
+        - "مرتفع / High"
+        - "متوسط / Medium"
+        - "منخفض / Low"
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: "السلوك الفعلي / Actual behavior"
+      description: "صف ما حدث فعلياً، وافصل الوقائع عن الاستنتاجات"
+      placeholder: "ماذا حدث؟ ما رسالة الخطأ؟"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "السلوك المتوقع / Expected behavior"
+      placeholder: "ما النتيجة الصحيحة؟"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: "خطوات إعادة الإنتاج / Reproduction steps"
+      placeholder: |
+        1. افتح ...
+        2. اختر ...
+        3. لاحظ ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: "بيئة الاختبار / Environment"
+      description: "الفرع أو commit، إصدار APK، إصدار Android، الجهاز، الرواية إن كانت ذات صلة"
+      placeholder: "Branch / SHA / Android version / Device / Riwayah"
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: "أدلة إضافية / Sanitized evidence"
+      description: "سجلات أو لقطات شاشة منقحة من الأسرار والبيانات الشخصية؛ لا تشارك محتوى حساساً"
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: "التأكيد / Confirmation"
+      options:
+        - label: "راجعت البلاغات السابقة وتجنبت مشاركة الأسرار والتفاصيل الأمنية الحساسة"
+          required: true

@@ -1,0 +1,65 @@
+
+name: Extract ALMISHKAT Knowledge Base
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout selected branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Extract and validate knowledge base
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          archive = Path("almishkat_knowledge_base_download.zip")
+          target = Path("engineering-knowledge-base")
+          prefix = "ALMISHKAT_ENGINEERING_KNOWLEDGE_BASE/"
+
+          if not archive.is_file():
+              raise SystemExit("ZIP file not found")
+
+          with ZipFile(archive) as z:
+              files = [i for i in z.infolist() if not i.is_dir()]
+              if len(files) != 25:
+                  raise SystemExit("Unexpected archive contents")
+
+              for item in files:
+                  if not item.filename.startswith(prefix):
+                      raise SystemExit("Unexpected archive path")
+
+                  relative = Path(item.filename[len(prefix):])
+                  if not relative.parts or ".." in relative.parts:
+                      raise SystemExit("Unsafe archive path")
+
+                  destination = target / relative
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  destination.write_bytes(z.read(item))
+
+          print("Extracted", len(files), "files")
+          PY
+
+      - name: Commit knowledge base
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add engineering-knowledge-base/
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "docs: extract engineering knowledge base"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+          

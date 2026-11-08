@@ -90,3 +90,12 @@
 - [سياسة Git Flow المعتمدة](docs/GIT_FLOW_POLICY.md)
 - [وثائق المشروع العربية](docs/README_AR.md)
 - [دليل بناء APK](docs/BUILD_APK_GUIDE_AR.md)
+- [مدونة السلوك | Code of Conduct](CODE_OF_CONDUCT.md)
+- [سياسة الأمان والإبلاغ الخاص عن الثغرات | Security Policy](SECURITY.md)
+
+## 8. الإبلاغ عن الثغرات ومخالفات السلوك
+
+- **الثغرات الأمنية:** اتبع [SECURITY.md](SECURITY.md). استخدم الإبلاغ الخاص عبر GitHub Security إن كان مفعّلاً؛ وإلا اطلب قناة خاصة آمنة دون كشف التفاصيل في Issues العامة.
+- **مخالفات السلوك:** اتبع [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)، ولا تنشر بيانات شخصية أو بلاغات حساسة علناً.
+- لم تُتحقق بعد قناة بريد أمنية مخصصة أو ضمانات استجابة؛ لا تفترض وجودهما.
+

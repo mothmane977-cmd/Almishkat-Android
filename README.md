@@ -50,7 +50,7 @@
 - إصلاحات قاعدة البيانات، واختبارات الترحيل والانحدار، والتحقق من النصوص القرآنية الرسمية ما زالت خاضعة لخارطة الطريق المعتمدة.
 - لا تُستخدم النصوص أو الخطوط أو التلاوات دون التحقق من المصدر والإصدار والترخيص.
 - لا تُدمج التغييرات في `main` أو `develop` مباشرة؛ راجع [دليل المساهمة](CONTRIBUTING.md) و[سياسة Git Flow](docs/GIT_FLOW_POLICY.md).
-- راجع [سياسة الروايات](docs/QURAN_EDITION_POLICY_AR.md) و[وثائق المشروع](docs/). قرار ترخيص المستودع النهائي قيد مهمة M0-FOUND-05، ولا ينبغي افتراض ترخيص لم يُعتمد.
+- راجع [سياسة الروايات](docs/QURAN_EDITION_POLICY_AR.md) و[وثائق المشروع](docs/). ترخيص الشيفرة الأصلية المعتمد: **ملكية خاصة — جميع الحقوق محفوظة** وفق [LICENSE](LICENSE). تبقى تراخيص المكتبات والنصوص القرآنية والخطوط والتلاوات والمواد الخارجية مستقلة، ويجب التحقق من حقوقها قبل دمجها أو توزيعها.
 
 ---
 
@@ -87,6 +87,6 @@ The CI workflow supplies Gradle on its runner; a Gradle Wrapper should not be as
 - `.github/workflows/`: CI workflows.
 
 ### Limitations and governance
-Database migrations, regression tests, Quran text verification, and production readiness remain subject to the approved roadmap. Do not assume the app currently contains authenticated Quran text, complete video-export behavior, or a finalized software/content license.
+Database migrations, regression tests, Quran text verification, and production readiness remain subject to the approved roadmap. Do not assume the app currently contains authenticated Quran text, complete video-export behavior, or fully cleared third-party content rights.
 
-See [Contributing](CONTRIBUTING.md), [Git Flow](docs/GIT_FLOW_POLICY.md), [Quran Edition Policy](docs/QURAN_EDITION_POLICY_AR.md), and [technical documentation](docs/). Licensing is pending the M0-FOUND-05 decision; code and Quranic content rights must be assessed separately.
+See [Contributing](CONTRIBUTING.md), [Git Flow](docs/GIT_FLOW_POLICY.md), [Quran Edition Policy](docs/QURAN_EDITION_POLICY_AR.md), and [technical documentation](docs/). The original project source code is **proprietary — All Rights Reserved**, as documented in [LICENSE](LICENSE). Third-party libraries, Quranic texts, fonts, recitations, and other assets have separate licenses and rights that must be verified before integration or distribution.

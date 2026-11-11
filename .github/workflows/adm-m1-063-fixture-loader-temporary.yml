@@ -42,16 +42,15 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: |
-            mkdir -p adm-m1-063-evidence
-            adb shell getprop ro.build.version.sdk > adm-m1-063-evidence/device-api.txt
-            adb shell getprop ro.build.fingerprint > adm-m1-063-evidence/device-fingerprint.txt
-            set +e
-            gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.almishkat.studio.FixtureLoaderVersionTest --no-daemon --stacktrace > adm-m1-063-evidence/gradle-connected.log 2>&1
-            status=$?
-            printf 'HEAD_SHA=%s\nGRADLE_EXIT=%s\nTEST_CLASS=FixtureLoaderVersionTest\n' "$GITHUB_SHA" "$status" > adm-m1-063-evidence/status.txt
-            echo "Fixture loader API test Gradle exit: $status"
-            exit "$status"
+          script: >-
+            bash -c 'mkdir -p adm-m1-063-evidence;
+            adb shell getprop ro.build.version.sdk > adm-m1-063-evidence/device-api.txt;
+            adb shell getprop ro.build.fingerprint > adm-m1-063-evidence/device-fingerprint.txt;
+            gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.almishkat.studio.FixtureLoaderVersionTest --no-daemon --stacktrace > adm-m1-063-evidence/gradle-connected.log 2>&1;
+            rc=$?;
+            printf "HEAD_SHA=%s\\nGRADLE_EXIT=%s\\nTEST_CLASS=FixtureLoaderVersionTest\\n" "$GITHUB_SHA" "$rc" > adm-m1-063-evidence/status.txt;
+            echo "Fixture loader Gradle exit: $rc";
+            exit "$rc"'
       - name: Preserve JUnit XML and Gradle diagnostics
         uses: actions/upload-artifact@v4
         if: always()

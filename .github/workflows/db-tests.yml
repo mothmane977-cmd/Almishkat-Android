@@ -1,19 +1,34 @@
-# ADM-M1-040: GREEN comparison TRIAL only; not a required status check.
-# Enable branch protection only after fixture acceptance, successful Android CI and owner authorization.
+# ADM-M1-042 / M1-CI-01 — PR-ready candidate. NOT a required check yet.
+# All PRs targeting develop or main are checked (no workflow-level paths filter):
+# an absent/skipped required workflow can leave branch protection pending forever.
+# The matrix tests only acceptance suites; Historical RED evidence runs separately.
 name: db-tests
 
 on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+  # One isolated branch is allowed to exercise the candidate without touching protection.
   push:
     branches:
-      - 'feature/M1-CI-01-green-trial-ADM-M1-040*'
+      - feature/M1-CI-01-pr-ready-ADM-M1-042
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: db-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android-db-tests:
-    if: startsWith(github.ref, 'refs/heads/feature/M1-CI-01-green-trial-ADM-M1-040')
     name: android-db-tests (API ${{ matrix.api }})
     runs-on: ubuntu-22.04
     timeout-minutes: 60
@@ -22,7 +37,7 @@ jobs:
       matrix:
         api: [26, 36]
     steps:
-      - name: Checkout tested D01 + scenes integration base and M1-TST-01 fixture loader
+      - name: Checkout current candidate / PR merge commit
         uses: actions/checkout@v4
       - name: Java 17
         uses: actions/setup-java@v4
@@ -46,11 +61,11 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: bash scripts/run-m1-ci-01-db-tests.sh
-      - name: Publish original JUnit XML, diagnostics, timing even when RED
+      - name: Publish original JUnit XML, diagnostics, timing even if tests fail
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: adm-m1-040-run-${{ github.run_id }}-api-${{ matrix.api }}
+          name: adm-m1-042-run-${{ github.run_id }}-api-${{ matrix.api }}
           if-no-files-found: warn
           path: |
             m1-ci-01-output/**
@@ -59,18 +74,18 @@ jobs:
 
   db-tests:
     name: db-tests
-    if: always() && startsWith(github.ref, 'refs/heads/feature/M1-CI-01-green-trial-ADM-M1-040')
+    if: always()
     needs: [android-db-tests]
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
-      - name: Require both Android API 26 and 36 (no failure masking)
+      - name: Require both Android API 26 and 36 (fail closed)
         env:
           MATRIX_RESULT: ${{ needs['android-db-tests'].result }}
         run: |
           echo "android-db-tests matrix result: $MATRIX_RESULT"
           if [ "$MATRIX_RESULT" != "success" ]; then
-            echo "::error::At least one required Android DB acceptance lane failed or was cancelled."
+            echo "::error::At least one required Android DB lane failed, skipped or was cancelled."
             exit 1
           fi
           echo "Both Android DB acceptance lanes passed."

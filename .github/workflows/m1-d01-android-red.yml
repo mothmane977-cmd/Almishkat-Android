@@ -44,17 +44,7 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: |
-            mkdir -p adm-m1-012-output
-            adb shell getprop ro.build.version.sdk > adm-m1-012-output/device-api.txt
-            adb shell getprop ro.build.fingerprint > adm-m1-012-output/device-fingerprint.txt
-            set +e
-            gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.almishkat.studio.D01HistoricalRedEvidenceTest --no-daemon --stacktrace > adm-m1-012-output/gradle-connected.log 2>&1
-            status=$?
-            printf 'GRADLE_EXIT=%s\nAPI=%s\n' "$status" '${{ matrix.api-level }}' > adm-m1-012-output/status.txt
-            adb logcat -d -s ADM_M1_012:I '*:S' > adm-m1-012-output/logcat-d01.txt || true
-            echo "D01 Android evidence: exit=$status. Inspect JUnit XML to distinguish expected RED from build BLOCKED."
-            exit "$status"
+          script: bash scripts/run-d01-red.sh
       - name: Upload logs and JUnit reports even on RED/BLOCKED
         uses: actions/upload-artifact@v4
         if: always()

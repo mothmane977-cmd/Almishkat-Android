@@ -1,0 +1,118 @@
+# ADM-M1-043 / M1-CI-01 — review-only PR event test.
+# Workflow-only change based on develop: no D01, studio_scenes or test fixture backports.
+# Do not add "paths" filtering: an absent required check can stay Pending on a PR.
+# Historical RED tests are deliberately excluded from the acceptance filter.
+name: db-tests
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-db-tests:
+    name: android-db-tests (API ${{ matrix.api }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 36]
+    steps:
+      - name: Checkout PR merge commit
+        uses: actions/checkout@v4
+
+      # Fail before an expensive emulator if the baseline lacks required suites.
+      # This is an explicit BLOCKED/RED result, not a synthetic green result.
+      - name: Verify mandatory M1 tests and fixtures exist on the PR commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            scripts/run-m1-ci-01-db-tests.sh \
+            app/src/androidTest/java/com/almishkat/studio/FixtureLoaderVersionTest.kt \
+            app/src/androidTest/java/com/almishkat/studio/V1V10SchemaMatrixTest.kt \
+            app/src/androidTest/java/com/almishkat/studio/D01MigrationInstrumentedTest.kt; do
+            if [ ! -s "$file" ]; then
+              echo "::error::M1-CI-01 required source absent from PR checkout: $file"
+              exit 2
+            fi
+          done
+          for version in {1..10}; do
+            file="app/src/androidTest/assets/db/v${version}.sql"
+            if [ ! -s "$file" ]; then
+              echo "::error::M1-CI-01 required fixture absent from PR checkout: $file"
+              exit 2
+            fi
+          done
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle 8.14.3 (no project wrapper)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Android DB acceptance (excludes Historical RED)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash scripts/run-m1-ci-01-db-tests.sh
+
+      - name: Publish JUnit evidence (if tests reached Android)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adm-m1-043-run-${{ github.run_id }}-api-${{ matrix.api }}
+          if-no-files-found: warn
+          path: |
+            m1-ci-01-output/**
+            app/build/outputs/androidTest-results/**
+            app/build/reports/androidTests/**
+
+  db-tests:
+    name: db-tests
+    if: always()
+    needs: [android-db-tests]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Enforce matrix success (fail closed on failure or cancellation)
+        env:
+          MATRIX_RESULT: ${{ needs['android-db-tests'].result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "android-db-tests matrix result: $MATRIX_RESULT"
+          if [ "$MATRIX_RESULT" != "success" ]; then
+            echo "::error::db-tests blocked: Android DB lanes failed, were skipped, or were cancelled."
+            exit 1
+          fi
+          echo "db-tests: both required Android lanes succeeded."

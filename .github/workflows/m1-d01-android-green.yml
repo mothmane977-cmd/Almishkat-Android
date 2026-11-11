@@ -1,0 +1,57 @@
+# ADM-M1-018 GREEN runs only on isolated fix branch; historical RED remains separate.
+name: M1 D01 Android GREEN (isolated fix)
+
+on:
+  push:
+    branches:
+      - feature/M1-FIX-01-D01-isolated
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  d01-green:
+    if: github.ref == 'refs/heads/feature/M1-FIX-01-D01-isolated'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [26, 36]
+    steps:
+      - name: Checkout isolated D01 repair
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle 8.14.3
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android SQLiteOpenHelper GREEN instrumentation
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash scripts/run-d01-green.sh
+      - name: Upload JUnit XML and diagnostic logs on both PASS and FAIL
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: adm-m1-018-green-api-${{ matrix.api-level }}
+          if-no-files-found: warn
+          path: |
+            adm-m1-018-output/**
+            app/build/outputs/androidTest-results/**
+            app/build/reports/androidTests/**
+            app/build/reports/tests/**

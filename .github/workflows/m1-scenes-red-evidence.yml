@@ -1,0 +1,62 @@
+# Isolated historical RED evidence runner; does NOT modify or activate db-tests.
+name: M1 StudioScenes RED evidence (non-gating)
+
+on:
+  push:
+    branches:
+      - feature/M1-TST-01-scenes-red-ADM-M1-028
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scenes-red-evidence:
+    if: github.ref == 'refs/heads/feature/M1-TST-01-scenes-red-ADM-M1-028'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 36]
+        suite: [scenes-red, structural-matrix]
+        include:
+          - suite: scenes-red
+            testClass: com.almishkat.studio.StudioScenesHistoricalRedTest
+          - suite: structural-matrix
+            testClass: com.almishkat.studio.V1V10SchemaMatrixTest
+    steps:
+      - name: Checkout isolated RED branch
+        uses: actions/checkout@v4
+      - name: Configure Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle 8.14.3 (repository has no wrapper)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Execute Android JUnit — RED failures must remain visible
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash scripts/run-scenes-red.sh ${{ matrix.testClass }} ${{ matrix.suite }}
+      - name: Upload unaltered JUnit and diagnostics on PASS or RED
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: adm-m1-028-api-${{ matrix.api }}-${{ matrix.suite }}
+          if-no-files-found: warn
+          path: |
+            adm-m1-028-output/**
+            app/build/outputs/androidTest-results/**
+            app/build/reports/androidTests/**

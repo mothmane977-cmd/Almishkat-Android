@@ -84,7 +84,8 @@ class D01MigrationInstrumentedTest {
                 val sql = testAssets.assets.open("db/v" + fixtureVersion + ".sql")
                     .bufferedReader(Charsets.UTF_8).use { it.readText() }
                 check("RECONSTRUCTED" in sql)
-                sql.split(';').map { it.trim() }.filter { it.isNotBlank() }.forEach(db::execSQL)
+                sql.lineSequence().filterNot { it.trimStart().startsWith("--") }.joinToString("\n")
+                    .split(';').map { it.trim() }.filter { it.isNotBlank() }.forEach(db::execSQL)
                 if (version >= 4 && shape != "missing") createAudio(db, version, shape)
                 db.execSQL("INSERT INTO quran_ayah_hafs VALUES (1,1,'TEST_ONLY_NOT_QURAN_HAFS',1,1)")
                 db.execSQL("INSERT INTO quran_ayah_warsh VALUES (1,1,'TEST_ONLY_NOT_QURAN_WARSH',1,1)")
@@ -185,16 +186,22 @@ class D01MigrationInstrumentedTest {
         }
     }
 
+    // SQLiteOpenHelper is not AutoCloseable on API 26; close explicitly on every API.
+    private fun openProduction(ctx: Context) {
+        val helper = QuranLocalDatabase(ctx)
+        try { helper.writableDatabase } finally { helper.close() }
+    }
+
     private fun upgrade(version: Int, shape: String = "standard", reopen: Boolean = false) {
         val fx = seed(version, shape)
-        QuranLocalDatabase(fx.ctx).use { it.writableDatabase }
+        openProduction(fx.ctx)
         val after = snapshot(fx.file)
         assertEquals(10, after.version)
         checkPreservation(fx.before, after)
         checkAudio(fx.file)
         checkIntegrity(fx.file)
         if (reopen) repeat(2) {
-            QuranLocalDatabase(fx.ctx).use { it.writableDatabase }
+            openProduction(fx.ctx)
             assertEquals("Reopen must be idempotent", after, snapshot(fx.file))
         }
         Log.i("ADM_M1_012", "D01 upgrade PASS v" + version + " " + shape)
@@ -203,7 +210,7 @@ class D01MigrationInstrumentedTest {
     private fun mustRejectAtomically(version: Int, shape: String, reason: String? = null) {
         val fx = seed(version,shape)
         var error: SQLiteException? = null
-        try { QuranLocalDatabase(fx.ctx).use { it.writableDatabase } }
+        try { openProduction(fx.ctx) }
         catch (e: SQLiteException) { error = e }
         if (error==null) fail("Invalid D01 schema was accepted: v" + version + " " + shape)
         assertEquals("Migration error must rollback all state",fx.before,snapshot(fx.file))
@@ -240,7 +247,7 @@ class D01MigrationInstrumentedTest {
             }
         }
         try {
-            injection.use { it.writableDatabase }
+            try { injection.writableDatabase } finally { injection.close() }
             fail("Injected failure must throw")
         } catch(e:SQLiteException) {
             assertTrue(e.message.orEmpty().contains("TEST_ONLY_INJECTED_FAILURE"))
@@ -252,7 +259,7 @@ class D01MigrationInstrumentedTest {
     @Test fun original_D01_failure_does_not_corrupt_v1_fixture() {
         val fx=seed(1)
         try {
-            QuranLocalDatabase(fx.ctx).use { it.writableDatabase }
+            openProduction(fx.ctx)
             fail("Unexpected baseline success")
         } catch(e:SQLiteException) {
             assertTrue("Must be original duplicate-column failure",

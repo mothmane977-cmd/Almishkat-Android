@@ -27,8 +27,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Android SDK environment
-        uses: android-actions/setup-android@v3
+      # Hosted Ubuntu SDK + emulator-runner manage SDK; avoid legacy 'tools' package install.
       - name: Gradle 8.14.3 (no gradlew on develop)
         uses: gradle/actions/setup-gradle@v4
         with:

@@ -83,7 +83,9 @@ class QuranLocalDatabase(context: Context) :
         if (oldVersion < 2) createTimingTable(db)
         if (oldVersion < 3) createProjectsTable(db)
         if (oldVersion < 4) createAudioClipTable(db)
-        if (oldVersion < 5) migrateAudioClipLinks(db)
+        // D01: v1-v3 create the complete table; v4+ may have some link columns.
+        // Check the actual schema before adding only missing columns.
+        ensureAudioClipLinks(db)
         if (oldVersion < 6) createSceneLayersTable(db)
         if (oldVersion < 7) createSceneBackgroundTable(db)
         if (oldVersion == 7) db.execSQL("ALTER TABLE scene_backgrounds ADD COLUMN video_uri TEXT")
@@ -152,12 +154,111 @@ class QuranLocalDatabase(context: Context) :
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_audio_clip_project ON audio_clip_selections(project_id)")
     }
 
-    private fun migrateAudioClipLinks(db: SQLiteDatabase) {
-        db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN project_id TEXT")
-        db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN riwayah TEXT")
-        db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN surah_no INTEGER")
-        db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN ayah_no INTEGER")
-        db.execSQL("CREATE INDEX IF NOT EXISTS idx_audio_clip_project ON audio_clip_selections(project_id)")
+    // D01 only. Do not silently coerce existing user data or rebuild this table.
+    private data class AudioColumn(
+        val type: String, val notNull: Int, val defaultSql: String?, val primaryKey: Int
+    )
+
+    private fun requireAudioColumn(name: String, actual: AudioColumn, expected: AudioColumn) {
+        if (actual.type.trim().uppercase() != expected.type) {
+            throw android.database.sqlite.SQLiteException("D01 type mismatch: audio_clip_selections.$name")
+        }
+        if (actual.notNull != expected.notNull ||
+            actual.defaultSql != expected.defaultSql ||
+            actual.primaryKey != expected.primaryKey) {
+            throw android.database.sqlite.SQLiteException("D01 constraint mismatch: audio_clip_selections.$name")
+        }
+    }
+
+    private fun ensureAudioClipLinks(db: SQLiteDatabase) {
+        val columns = linkedMapOf<String, AudioColumn>()
+        db.rawQuery("PRAGMA table_info(audio_clip_selections)", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                columns[cursor.getString(1)] = AudioColumn(
+                    type = cursor.getString(2),
+                    notNull = cursor.getInt(3),
+                    defaultSql = if (cursor.isNull(4)) null else cursor.getString(4),
+                    primaryKey = cursor.getInt(5)
+                )
+            }
+        }
+        if (columns.isEmpty()) {
+            throw android.database.sqlite.SQLiteException("D01 missing audio_clip_selections table")
+        }
+
+        val required = linkedMapOf(
+            "clip_id" to AudioColumn("TEXT", 0, null, 1),
+            "source_uri" to AudioColumn("TEXT", 1, null, 0),
+            "start_ms" to AudioColumn("INTEGER", 1, null, 0),
+            "end_ms" to AudioColumn("INTEGER", 1, null, 0),
+            "created_at" to AudioColumn("INTEGER", 1, null, 0),
+            "updated_at" to AudioColumn("INTEGER", 1, null, 0)
+        )
+        for ((name, specification) in required) {
+            val actual = columns[name]
+                ?: throw android.database.sqlite.SQLiteException("D01 missing required audio column: $name")
+            requireAudioColumn(name, actual, specification)
+        }
+
+        // Nullable link fields; adding a missing field does not rewrite old clips.
+        val links = linkedMapOf(
+            "project_id" to "TEXT",
+            "riwayah" to "TEXT",
+            "surah_no" to "INTEGER",
+            "ayah_no" to "INTEGER"
+        )
+        for ((name, type) in links) {
+            val actual = columns[name]
+            if (actual == null) {
+                db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN $name $type")
+            } else {
+                requireAudioColumn(name, actual, AudioColumn(type, 0, null, 0))
+            }
+        }
+        ensureAudioClipIndex(db, "idx_audio_clip_uri", "source_uri")
+        ensureAudioClipIndex(db, "idx_audio_clip_project", "project_id")
+    }
+
+    private fun ensureAudioClipIndex(db: SQLiteDatabase, indexName: String, column: String) {
+        var exists = false
+        db.rawQuery(
+            "SELECT tbl_name FROM sqlite_master WHERE type='index' AND name=?",
+            arrayOf(indexName)
+        ).use { cursor ->
+            if (cursor.moveToFirst()) {
+                exists = true
+                if (cursor.getString(0) != "audio_clip_selections") {
+                    throw android.database.sqlite.SQLiteException("D01 index mismatch: $indexName")
+                }
+            }
+        }
+        if (!exists) {
+            db.execSQL("CREATE INDEX $indexName ON audio_clip_selections($column)")
+            return
+        }
+        val fields = mutableListOf<String?>()
+        db.rawQuery("PRAGMA index_info($indexName)", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                fields += if (cursor.isNull(2)) null else cursor.getString(2)
+            }
+        }
+        if (fields != listOf(column)) {
+            throw android.database.sqlite.SQLiteException("D01 index mismatch: $indexName")
+        }
+        var valid = false
+        db.rawQuery("PRAGMA index_list(audio_clip_selections)", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                if (cursor.getString(1) == indexName) {
+                    val isUnique = cursor.getInt(2) != 0
+                    val partialColumn = cursor.getColumnIndex("partial")
+                    val isPartial = partialColumn >= 0 && cursor.getInt(partialColumn) != 0
+                    valid = !isUnique && !isPartial
+                }
+            }
+        }
+        if (!valid) {
+            throw android.database.sqlite.SQLiteException("D01 index constraint mismatch: $indexName")
+        }
     }
 
     fun saveAudioClipSelection(selection: AudioClipSelection) {

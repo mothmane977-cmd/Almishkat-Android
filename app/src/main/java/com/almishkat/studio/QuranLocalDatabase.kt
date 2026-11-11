@@ -113,6 +113,9 @@ class QuranLocalDatabase(context: Context) :
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_scene_layers_scene ON scene_layers(scene_id, z_order)")
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_scene_backgrounds_scene ON scene_backgrounds(scene_id)")
         }
+        // ADM-M1-031: v9 introduced studio_scenes. Older upgrades must create it.
+        // A pre-existing table is verified, never silently replaced or dropped.
+        if (oldVersion < 10) ensureStudioScenesUpgrade(db, oldVersion)
         // Explicit migrations only. Never drop Quran data during an upgrade.
     }
 
@@ -204,6 +207,120 @@ class QuranLocalDatabase(context: Context) :
 
     fun deleteAudioClipSelection(clipId: String) {
         writableDatabase.delete("audio_clip_selections", "clip_id=?", arrayOf(clipId))
+    }
+
+    // ADM-M1-031 — isolated scene-table migration; no audio/background edits.
+    // v9 origin is documented in PROJECT_V21_SCENE_MANAGER_AR.md, not independently
+    // proven from a historical on-device database.
+    private data class SceneColumnSpec(
+        val type: String, val notNull: Int, val defaultSql: String?, val pk: Int
+    )
+
+    private fun ensureStudioScenesUpgrade(db: SQLiteDatabase, oldVersion: Int) {
+        var tableKind: String? = null
+        db.rawQuery(
+            "SELECT type FROM sqlite_master WHERE name=?",
+            arrayOf("studio_scenes")
+        ).use { c ->
+            if (c.moveToFirst()) tableKind = c.getString(0)
+        }
+        if (tableKind == null) {
+            if (oldVersion >= 9) {
+                throw android.database.sqlite.SQLiteException(
+                    "studio_scenes missing in schema v" + oldVersion
+                )
+            }
+            // Only v1-v8 are allowed to create a missing table.
+            createStudioScenesTable(db)
+        } else if (tableKind != "table") {
+            throw android.database.sqlite.SQLiteException(
+                "studio_scenes incompatible sqlite_master object: " + tableKind
+            )
+        }
+
+        // The exact expected columns and constraints come from onCreate().
+        // Column order may differ after ALTER; matching by name preserves old data.
+        val expected = linkedMapOf(
+            "scene_id" to SceneColumnSpec("TEXT", 0, null, 1),
+            "project_id" to SceneColumnSpec("TEXT", 1, null, 0),
+            "title" to SceneColumnSpec("TEXT", 1, null, 0),
+            "scene_order" to SceneColumnSpec("INTEGER", 1, null, 0),
+            "duration_ms" to SceneColumnSpec("INTEGER", 1, null, 0),
+            "transition_in" to SceneColumnSpec("TEXT", 1, "'CUT'", 0),
+            "transition_duration_ms" to SceneColumnSpec("INTEGER", 1, "0", 0),
+            "notes" to SceneColumnSpec("TEXT", 1, "''", 0),
+            "created_at" to SceneColumnSpec("INTEGER", 1, null, 0),
+            "updated_at" to SceneColumnSpec("INTEGER", 1, null, 0)
+        )
+        val actual = linkedMapOf<String, SceneColumnSpec>()
+        db.rawQuery("PRAGMA table_info(studio_scenes)", null).use { c ->
+            while (c.moveToNext()) {
+                actual[c.getString(1)] = SceneColumnSpec(
+                    c.getString(2).trim().uppercase(java.util.Locale.US),
+                    c.getInt(3),
+                    if (c.isNull(4)) null else c.getString(4),
+                    c.getInt(5)
+                )
+            }
+        }
+        if (actual != expected) {
+            val changed = (actual.keys + expected.keys).filter {
+                actual[it] != expected[it]
+            }.sorted()
+            throw android.database.sqlite.SQLiteException(
+                "studio_scenes incompatible columns/constraints: " + changed.joinToString(",")
+            )
+        }
+
+        val expectedIndex = "idx_studio_scenes_project_order"
+        var existingIndexTable: String? = null
+        db.rawQuery(
+            "SELECT tbl_name FROM sqlite_master WHERE type='index' AND name=?",
+            arrayOf(expectedIndex)
+        ).use { c ->
+            if (c.moveToFirst()) existingIndexTable = c.getString(0)
+        }
+        if (existingIndexTable == null) {
+            // This is safe for a verified table: existing rows are untouched.
+            db.execSQL(
+                "CREATE INDEX " + expectedIndex +
+                " ON studio_scenes(project_id, scene_order)"
+            )
+            existingIndexTable = "studio_scenes"
+        }
+        if (existingIndexTable != "studio_scenes") {
+            throw android.database.sqlite.SQLiteException(
+                "studio_scenes incompatible index owner: " + expectedIndex
+            )
+        }
+
+        val indexColumns = mutableListOf<String?>()
+        db.rawQuery("PRAGMA index_info(" + expectedIndex + ")", null).use { c ->
+            while (c.moveToNext()) indexColumns +=
+                if (c.isNull(2)) null else c.getString(2)
+        }
+        if (indexColumns != listOf("project_id", "scene_order")) {
+            throw android.database.sqlite.SQLiteException(
+                "studio_scenes incompatible index columns: " + expectedIndex
+            )
+        }
+        var compatibleIndex = false
+        db.rawQuery("PRAGMA index_list(studio_scenes)", null).use { c ->
+            while (c.moveToNext()) {
+                if (c.getString(1) == expectedIndex) {
+                    val originPosition = c.getColumnIndex("origin")
+                    val partialPosition = c.getColumnIndex("partial")
+                    compatibleIndex = c.getInt(2) == 0 &&
+                        (originPosition < 0 || c.getString(originPosition) == "c") &&
+                        (partialPosition < 0 || c.getInt(partialPosition) == 0)
+                }
+            }
+        }
+        if (!compatibleIndex) {
+            throw android.database.sqlite.SQLiteException(
+                "studio_scenes incompatible index constraints: " + expectedIndex
+            )
+        }
     }
 
     private fun createStudioScenesTable(db: SQLiteDatabase) {

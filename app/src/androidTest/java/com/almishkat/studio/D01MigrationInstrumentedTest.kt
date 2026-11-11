@@ -28,9 +28,15 @@ class D01MigrationInstrumentedTest {
     private val context: Context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val testAssets: Context get() = InstrumentationRegistry.getInstrumentation().context
 
-    private data class Snapshot(val version: Int, val schema: List<String>,
-                                val data: Map<String, List<Map<String, String>>>)
-    private data class Fixture(val file: File, val ctx: Context, val before: Snapshot)
+    // Keyed snapshots ignore SQLite rowid and row traversal order.
+    // Composite/nullable PK: a multiset per key preserves duplicate rows.
+    internal data class Snapshot(
+        val version: Int,
+        val schema: List<String>,
+        val primaryKeys: Map<String, List<String>>,
+        val data: Map<String, Map<String, List<Map<String, String>>>>
+    )
+    internal data class Fixture(val file: File, val ctx: Context, val before: Snapshot)
 
     private class IsolatedContext(base: Context, private val file: File) : ContextWrapper(base) {
         override fun getDatabasePath(name: String): File = file
@@ -43,7 +49,14 @@ class D01MigrationInstrumentedTest {
                 SQLiteDatabase.CREATE_IF_NECESSARY, errorHandler)
     }
 
-    private fun snapshot(file: File): Snapshot =
+    private fun quoteIdentifier(name: String): String = "\"" + name.replace("\"", "\"\"") + "\""
+
+    private fun canonical(values: Map<String, String>): String =
+        values.toSortedMap().entries.joinToString("") {
+            it.key.length.toString() + ":" + it.key + it.value.length.toString() + ":" + it.value
+        }
+
+    internal fun snapshot(file: File): Snapshot =
         SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
             val schema = mutableListOf<String>()
             db.rawQuery("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name", null).use { c ->
@@ -53,15 +66,35 @@ class D01MigrationInstrumentedTest {
             db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", null).use { c ->
                 while (c.moveToNext()) tables.add(c.getString(0))
             }
-            val rows = linkedMapOf<String,List<Map<String,String>>>()
+            val primaryKeys = linkedMapOf<String, List<String>>()
+            val rows = linkedMapOf<String, Map<String, List<Map<String, String>>>>()
             for (table in tables) {
-                val list = mutableListOf<Map<String,String>>()
-                db.rawQuery("SELECT * FROM " + table + " ORDER BY rowid", null).use { c ->
-                    while (c.moveToNext()) list.add((0 until c.columnCount).associate { c.getColumnName(it) to value(c,it) })
+                val keys = mutableListOf<Pair<Int, String>>()
+                db.rawQuery("PRAGMA table_info(" + quoteIdentifier(table) + ")", null).use { c ->
+                    while (c.moveToNext()) {
+                        val pkPosition = c.getInt(5)
+                        if (pkPosition > 0) keys.add(pkPosition to c.getString(1))
+                    }
                 }
-                rows[table] = list
+                val pkColumns = keys.sortedBy { it.first }.map { it.second }
+                primaryKeys[table] = pkColumns
+                val groups = linkedMapOf<String, MutableList<Map<String, String>>>()
+                db.rawQuery("SELECT * FROM " + quoteIdentifier(table), null).use { c ->
+                    while (c.moveToNext()) {
+                        val item = (0 until c.columnCount).associate {
+                            c.getColumnName(it) to value(c, it)
+                        }
+                        // Tables without a PK are compared as multisets of full row values.
+                        val key = if (pkColumns.isEmpty()) canonical(item)
+                                  else canonical(pkColumns.associateWith { col -> item.getValue(col) })
+                        groups.getOrPut(key) { mutableListOf() }.add(item)
+                    }
+                }
+                rows[table] = groups.toSortedMap().mapValues { (_, entries) ->
+                    entries.sortedBy(::canonical)
+                }
             }
-            Snapshot(db.version, schema, rows)
+            Snapshot(db.version, schema, primaryKeys, rows)
         }
 
     private fun value(c: Cursor, col: Int): String = when (c.getType(col)) {
@@ -72,7 +105,7 @@ class D01MigrationInstrumentedTest {
         else -> "S" + c.getString(col)
     }
 
-    private fun seed(version: Int, shape: String = "standard"): Fixture {
+    internal fun seed(version: Int, shape: String = "standard"): Fixture {
         require(version in 1..5)
         val dir = File(context.cacheDir, "adm-m1-012-ONLY/" + UUID.randomUUID())
         check(dir.mkdirs())
@@ -141,12 +174,27 @@ class D01MigrationInstrumentedTest {
     }
 
     private fun checkPreservation(old: Snapshot, now: Snapshot) {
-        for ((table, entries) in old.data) {
-            val newEntries = now.data[table] ?: throw AssertionError("Lost table: " + table)
-            assertEquals("Row count changed in " + table, entries.size, newEntries.size)
-            for ((rowIndex, original) in entries.withIndex())
-                for ((col, value) in original)
-                    assertEquals("Changed " + table + "." + col, value, newEntries[rowIndex][col])
+        for ((table, oldGroups) in old.data) {
+            val newGroups = now.data[table] ?: throw AssertionError("Lost table: $table")
+            assertEquals("Primary-key definition changed in $table",
+                old.primaryKeys[table], now.primaryKeys[table])
+            assertEquals("Row keys changed in $table", oldGroups.keys, newGroups.keys)
+            for ((key, originals) in oldGroups) {
+                val later = newGroups[key] ?: throw AssertionError("Lost key in $table: $key")
+                assertEquals("Row multiplicity changed in $table key=$key",
+                    originals.size, later.size)
+                val originalColumns = originals.firstOrNull()?.keys ?: emptySet()
+                val priorValues = originals.map(::canonical).sorted()
+                // A migration may ADD columns; compare each original field by PK.
+                val afterValues = later.map { row ->
+                    val projection = originalColumns.associateWith { col ->
+                        row[col] ?: throw AssertionError("Lost column $table.$col")
+                    }
+                    canonical(projection)
+                }.sorted()
+                assertEquals("Stored values changed in $table key=$key",
+                    priorValues, afterValues)
+            }
         }
     }
 
@@ -177,7 +225,7 @@ class D01MigrationInstrumentedTest {
         }
     }
 
-    private fun checkIntegrity(file: File) {
+    internal fun checkIntegrity(file: File) {
         SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
             db.rawQuery("PRAGMA integrity_check", null).use { c ->
                 assertTrue(c.moveToFirst()); assertEquals("ok", c.getString(0))
@@ -187,7 +235,7 @@ class D01MigrationInstrumentedTest {
     }
 
     // SQLiteOpenHelper is not AutoCloseable on API 26; close explicitly on every API.
-    private fun openProduction(ctx: Context) {
+    internal fun openProduction(ctx: Context) {
         val helper = QuranLocalDatabase(ctx)
         try { helper.writableDatabase } finally { helper.close() }
     }
@@ -237,35 +285,4 @@ class D01MigrationInstrumentedTest {
     @Test fun v5_missing_table_rejected() = mustRejectAtomically(5,"missing")
 
     // This separate positive test proves test-harness transaction rollback only.
-    @Test fun injected_failure_in_test_only_helper_rolls_back() {
-        val fx=seed(3)
-        val injection=object:SQLiteOpenHelper(fx.ctx,"almishkat_quran.db",null,10) {
-            override fun onCreate(db:SQLiteDatabase) { }
-            override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int) {
-                db.execSQL("ALTER TABLE studio_projects ADD COLUMN test_injected TEXT")
-                throw SQLiteException("TEST_ONLY_INJECTED_FAILURE")
-            }
-        }
-        try {
-            try { injection.writableDatabase } finally { injection.close() }
-            fail("Injected failure must throw")
-        } catch(e:SQLiteException) {
-            assertTrue(e.message.orEmpty().contains("TEST_ONLY_INJECTED_FAILURE"))
-        }
-        assertEquals(fx.before,snapshot(fx.file))
-        checkIntegrity(fx.file)
-    }
-
-    @Test fun original_D01_failure_does_not_corrupt_v1_fixture() {
-        val fx=seed(1)
-        try {
-            openProduction(fx.ctx)
-            fail("Unexpected baseline success")
-        } catch(e:SQLiteException) {
-            assertTrue("Must be original duplicate-column failure",
-                e.message.orEmpty().contains("duplicate column name"))
-        }
-        assertEquals(fx.before,snapshot(fx.file))
-        checkIntegrity(fx.file)
-    }
 }

@@ -71,8 +71,8 @@ class V1V10SchemaMatrixTest {
         SQLiteDatabase.openOrCreateDatabase(file, null).use { db ->
             db.beginTransaction()
             try {
-                sqlFixture(version).split(';').map(String::trim)
-                    .filter(String::isNotEmpty).forEach(db::execSQL)
+                sqlFixture(version).split(';').map { it.trim() }
+                    .filter { it.isNotEmpty() }.forEach(db::execSQL)
                 assertEquals("Fixture PRAGMA user_version mismatch", version, db.version)
                 db.execSQL("INSERT INTO quran_ayah_hafs (surah_no,ayah_no,text_uthmani,juz_no,page_no) VALUES (1,1,'TEST_ONLY_NOT_QURAN_HAFS',1,1)")
                 db.execSQL("INSERT INTO quran_ayah_warsh (surah_no,ayah_no,text_uthmani,juz_no,page_no) VALUES (1,1,'TEST_ONLY_NOT_QURAN_WARSH',1,1)")
@@ -199,10 +199,10 @@ class V1V10SchemaMatrixTest {
         val after = snapshot(candidate.file)
         assertEquals("user_version after upgrade", 10, after.version)
         assertPreserves(candidate.old, after)
-        validateIntegrity(candidate.file)
         val fresh = canonicalFresh()
         assertEquals("sqlite_master object names differ from fresh v10 (likely other task)", fresh.schema.keys, after.schema.keys)
         assertEquals("sqlite_master DDL differs from fresh v10", fresh.schema, after.schema)
+        validateIntegrity(candidate.file)
         repeat(2) {
             openViaProduction(candidate.ctx)
             assertEquals("Reopening unexpectedly changed schema or data", after, snapshot(candidate.file))

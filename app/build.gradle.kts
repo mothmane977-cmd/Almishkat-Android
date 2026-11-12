@@ -29,7 +29,8 @@ android {
         getByName("test").java.srcDir("src/sharedTest/java")
         getByName("androidTest").apply {
             java.srcDir("src/sharedTest/java")
-            assets.srcDir("src/test/resources")
+            // ADM-M1-076: instrumented db fixtures come from src/androidTest/assets/db.
+            // src/test/resources/db is reserved for JVM tests to avoid duplicate Android assets.
         }
     }
 }

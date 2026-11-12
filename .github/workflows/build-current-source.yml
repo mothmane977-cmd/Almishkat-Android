@@ -231,7 +231,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          gradle --no-daemon --stacktrace :app:testDebugUnitTest
+          gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebugAndroidTest
 
       - name: Upload database regression reports
         if: always()

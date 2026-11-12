@@ -101,7 +101,7 @@ The owner's continuation request authorizes this M1 verification round. Both run
 - نفس ملفات SQL العشرة تُحمَّل كموارد JVM وassets لاختبارات Android، دون نسخ مختلفة قابلة للتباعد.
 - مسار GitHub مؤقت ومحـدود بفرع الإصلاح؛ لا يؤسس بنية M2 دائمة أو يغيّر Required Checks. تُجمع تقارير JUnit وlogcat وخصائص الجهاز، وتفشل الجولة عند غياب التقارير أو وجود skip أو عدد حالات غير 19 لكل API.
 
-The upgrade cases preserve seeded values and compare column/index metadata against a fresh installation, then verify integrity and two reopens. This excludes physical column order and does not establish CHECK/trigger/collation/raw-DDL equivalence. Both runners consume the same fixture files. A temporary branch-scoped GitHub workflow provides bounded M1 device evidence, with exact test counts and fail-closed report checks; this is not a new permanent M2 gate.
+The upgrade cases preserve seeded values and compare column/index metadata against a fresh installation, then verify integrity and two reopens. This excludes physical column order and does not establish CHECK/trigger/collation/raw-DDL equivalence. Both runners consume the same fixture files. The existing build job compiles the instrumentation APK alongside the unit suite. A temporary branch-scoped GitHub workflow provides bounded M1 device evidence, with exact test counts and fail-closed report checks; this is not a new permanent M2 gate.
 
 ### النتائج الموسعة | Expanded results
 
@@ -110,8 +110,39 @@ The upgrade cases preserve seeded values and compare column/index metadata again
 | Expanded `:app:test` | **PASS**, Debug 38/38 + Release 38/38, 0 failures/errors/skips, exit 0 |
 | `:app:assembleDebug :app:assembleDebugAndroidTest` | **PASS**, exit 0; both APKs generated |
 | Expanded baseline RED replay at `22dac681` | **FAIL (RED)**: 38 tests, 36 failures, 0 errors/skips; exit 1. Fixed source restored automatically. |
-| API26 and API36 emulator runs | Pending; no device PASS claimed yet |
+| API26 and API36 emulator runs | **PASS**, 19/19 each; no failures/errors/skips. See SHA-bound evidence below. |
 
 Local command: `gradle --no-daemon :app:test :app:assembleDebug :app:assembleDebugAndroidTest`. Full log retained as `/workspace/scratch/m1-expanded-green.log` (not committed). The debug app APK remains byte-identical to the first round (`da950726…18dae`); test-only source changes do not modify production output. Instrumentation APK: 388,130 bytes, SHA-256 `166c5be6540bf880102afc524da6af15581e096a0ea2bd9e440034f526f66032`.
 
 هذه نتائج بناء واختبارات محلية، وليست بعدُ نتائج أجهزة. / These are local unit/build results, not device execution results.
+
+تشخيص إعداد المحاكي / Emulator setup diagnosis: [run 43177285232](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/43177285232) stopped before Android execution at an immediate KVM permission check. The retained artifact reports `STATUS=NOT_RUN` and later `crw-rw-rw-` permissions on `/dev/kvm`, identifying an asynchronous udev rule application race. Commit `8813fa51c8aeeba6b1278f9e85173f5681e55f6a` waits for `udevadm settle --timeout=30` before checking access. This is infrastructure failure evidence, not a failed application assertion or device PASS.
+
+تحقق منفصل من فشل مُحلل JUnit / Report-parser failure verification: the actual embedded workflow Python was executed with controlled XML. Missing reports, 18 cases, a skipped case, a failed case, or an error all returned exit 1; exactly 19 clean cases returned exit 0. No partial suite or skipped test is accepted as PASS.
+
+السجلات المحلية الموسعة / Retained expanded local logs:
+
+| ملف / File | SHA-256 |
+| --- | --- |
+| `/workspace/scratch/m1-expanded-red.log` | `83554afb91adf7c3e3678066b450e047edb18210b6e153e27db20e5a24234598` |
+| `/workspace/scratch/m1-expanded-red.xml` | `cecbb1b8e6c63deff86b02a2a20da92d3d5c405956c7789489b24ffc14b03825` |
+| `/workspace/scratch/m1-expanded-final-green.log` | `1454b6df6f10f2ef880e7ed43e18481b14ddd4bd02bc8b8da86b34c23427fce9` |
+
+محاولة التشغيل الثانية / Second device attempt: [run 43177719490](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/43177719490) on `8813fa51` passed KVM and booted API26, but the API26 image rejected `adb logcat -c` before Gradle ran. Log clearing was changed to best-effort diagnostics only; boot/API checks, Gradle exit status and exact 19-case JUnit acceptance remain strict. No API26 test PASS is inferred from this failed setup attempt.
+
+API36 evidence from [job 131045909785](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/43177719490/job/131045909785) at `8813fa51`: emulator boot recorded, Gradle `BUILD SUCCESSFUL`, **19 tests / 0 failures / 0 errors / 0 skips**. The run as a whole failed because its API26 lane stopped at log clearing, so this evidence is attributed only to API36. Both lanes are repeated at the diagnostic-only fix before final acceptance.
+
+### النتيجة النهائية للمحاكيات | Final emulator result
+
+[Run 43178361895](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/43178361895) at **`16be26b27d19b36d0cc2fe836933857a9afbc1a6`**: both lanes PASS. Logs confirm emulator boot, Gradle exit zero and exact 19-case clean JUnit totals. API26 reports Android 8.0.0; API36 reports Android 16. Both operate on synthetic labelled fixtures, not authentic user databases.
+
+نجحت الجولتان على SHA نفسه: **19/19 لكل API** دون فشل أو خطأ أو تخطٍّ. تؤكد السجلات إقلاع المحاكي ونجاح Gradle وJUnit. هذه اختبارات Android فعلية على محاكيات، وتظل بيانات السيناريوهات معاد بنائها وليست قواعد مستخدمين أصلية.
+
+| الجهاز / Device | النتيجة / Result | تقارير JUnit والجهاز / Reports | SHA-256 of artifact ZIP |
+| --- | --- | --- | --- |
+| API 36 | **PASS: 19/19**, 0 failures/errors/skips | [artifact 13925192131](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/43178361895/artifacts/13925192131) | `sha256:54a2b42123c3f05c8b7ee1e3026b127cac46372b65c03c6903e8bfb9ee238212` |
+| API 26 | **PASS: 19/19**, 0 failures/errors/skips | [artifact 13924867955](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/43178361895/artifacts/13924867955) | `sha256:bbe769b4f498d6702e3b3230287fcd79949d02a9508544760cc406aa40c16a85` |
+
+أزيل Workflow المحاكيات المؤقت بعد حفظ الأدلة؛ يبقى موجودًا في تاريخ الالتزام المختبَر لإعادة التشغيل. لا تغيير في `app/` أو ملفات SQL بعد SHA الاختبار أعلاه. التغيير النهائي يحدّث التوثيق ويزيل المسار المؤقت ويضيف تجميع APK الاختبار إلى فحص البناء القائم. يجب نجاح الفحص الإلزامي على رأس PR النهائي نفسه قبل الدمج.
+
+The temporary device workflow is removed after evidence capture and remains reproducible from the tested commit. Final publication leaves all `app/` and fixture files byte-identical to the device-tested SHA; only documentation and workflows change. The existing required job retains unit execution and instrumentation-APK compilation. Required CI must pass again on the final PR head. No M1 milestone or Issue #17 closure is claimed.

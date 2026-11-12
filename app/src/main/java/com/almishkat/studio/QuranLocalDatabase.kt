@@ -35,7 +35,7 @@ class QuranDatasetException(message: String) : Exception(message)
 
 /** Offline-first SQLite storage with physically separate tables per riwayah. */
 class QuranLocalDatabase(context: Context) :
-    SQLiteOpenHelper(context, "almishkat_quran.db", null, 10) {
+    SQLiteOpenHelper(context, "almishkat_quran.db", null, 11) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""
@@ -113,6 +113,9 @@ class QuranLocalDatabase(context: Context) :
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_scene_layers_scene ON scene_layers(scene_id, z_order)")
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_scene_backgrounds_scene ON scene_backgrounds(scene_id)")
         }
+        // v10 upgrades could finish without creating the scene table. A version
+        // bump repairs those installed databases as well as older upgrade paths.
+        if (oldVersion < 11) createStudioScenesTable(db)
         // Explicit migrations only. Never drop Quran data during an upgrade.
     }
 
@@ -153,10 +156,19 @@ class QuranLocalDatabase(context: Context) :
     }
 
     private fun migrateAudioClipLinks(db: SQLiteDatabase) {
-        db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN project_id TEXT")
-        db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN riwayah TEXT")
-        db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN surah_no INTEGER")
-        db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN ayah_no INTEGER")
+        // v1-v3 have just created the complete table above. Existing v4 tables
+        // may still need these nullable columns; never add the same field twice.
+        val existing = db.rawQuery("PRAGMA table_info(audio_clip_selections)", null).use { c ->
+            buildSet { while (c.moveToNext()) add(c.getString(1).lowercase(java.util.Locale.ROOT)) }
+        }
+        for ((name, type) in mapOf(
+            "project_id" to "TEXT", "riwayah" to "TEXT",
+            "surah_no" to "INTEGER", "ayah_no" to "INTEGER"
+        )) {
+            if (name !in existing) {
+                db.execSQL("ALTER TABLE audio_clip_selections ADD COLUMN $name $type")
+            }
+        }
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_audio_clip_project ON audio_clip_selections(project_id)")
     }
 
@@ -312,14 +324,36 @@ class QuranLocalDatabase(context: Context) :
             put("motion_enabled", if (background.motionEnabled) 1 else 0)
             put("updated_at", System.currentTimeMillis())
         }
-        writableDatabase.insertWithOnConflict(
-            "scene_backgrounds", null, values, SQLiteDatabase.CONFLICT_REPLACE
-        )
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            // SQLite does not treat NULLs as equal in a composite primary key.
+            // Serialize the lookup and write instead of relying on REPLACE.
+            val key = if (background.sceneId == null) "project_id=? AND scene_id IS NULL"
+                      else "project_id=? AND scene_id=?"
+            val args = if (background.sceneId == null) arrayOf(background.projectId)
+                       else arrayOf(background.projectId, background.sceneId)
+            val current = db.rawQuery(
+                "SELECT rowid,updated_at FROM scene_backgrounds WHERE $key ORDER BY updated_at DESC,rowid DESC LIMIT 1",
+                args
+            ).use { c -> if (c.moveToFirst()) c.getLong(0) to c.getLong(1) else null }
+            if (current == null) {
+                db.insertOrThrow("scene_backgrounds", null, values)
+            } else {
+                // Keep older duplicate rows for a separately reviewed cleanup.
+                // Clock corrections must not make the just-saved row look older.
+                values.put("updated_at", maxOf(System.currentTimeMillis(), current.second))
+                db.update("scene_backgrounds", values, "rowid=?", arrayOf(current.first.toString()))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     fun getSceneBackground(projectId: String): SceneBackground? {
         readableDatabase.rawQuery(
-            "SELECT project_id,image_uri,video_uri,preset,motion_enabled FROM scene_backgrounds WHERE project_id=? AND scene_id IS NULL LIMIT 1",
+            "SELECT project_id,image_uri,video_uri,preset,motion_enabled FROM scene_backgrounds WHERE project_id=? AND scene_id IS NULL ORDER BY updated_at DESC,rowid DESC LIMIT 1",
             arrayOf(projectId)
         ).use { c ->
             if (!c.moveToFirst()) return null

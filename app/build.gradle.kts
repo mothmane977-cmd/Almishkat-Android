@@ -21,6 +21,9 @@ android {
         versionName = "0.1.0"
     }
     buildFeatures { compose = true }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.08.00"))
@@ -30,4 +33,6 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.16")
 }

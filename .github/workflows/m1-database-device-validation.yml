@@ -73,7 +73,9 @@ jobs:
           adb shell pm path android > m1-device-evidence/package-manager-ready.txt
           adb shell getprop ro.build.fingerprint > m1-device-evidence/device-fingerprint.txt
           printf '%s\n' "$actual_api" > m1-device-evidence/device-api.txt
-          adb logcat -c
+          # Some API 26 images refuse log-buffer clearing; diagnostics must not
+          # prevent the strict instrumentation command and JUnit checks below.
+          adb logcat -c || true
           gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest \
             -Pandroid.testInstrumentationRunnerArguments.class="$TEST_CLASS" \
             2>&1 | tee m1-device-evidence/gradle-connected.log

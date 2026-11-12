@@ -1,50 +1,93 @@
-# M1-TST-01 — Historical SQLite fixture provenance register
-**تحديث ADM-M1-060 — 2026-11-11 — حزمة Fixtures/Loader محدودة على PR #18، وليست قبولاً نهائياً لترحيلات v1–v10.**
+# M1-TST-01 — سجل مصادر مخططات الاختبار | Fixture provenance register
 
-التتبع: [Issue #17](https://github.com/mothmane977-cmd/Almishkat-Android/issues/17)؛ [PR #18](https://github.com/mothmane977-cmd/Almishkat-Android/pull/18) (مفتوح، غير مدمج)؛ `docs/db/FIXTURES.md` على الفرع القائم `test/M1-TST-01-historical-schema-audit` الخاص بـPR #18. تعديل هذا PR مُصرّح به في ADM-M1-060؛ لم يُنشأ PR جديد.
+المهمة: [Issue #17](https://github.com/mothmane977-cmd/Almishkat-Android/issues/17). هذا السجل يستكمل توثيق الملفات الموجودة بعد دمج [PR #23](https://github.com/mothmane977-cmd/Almishkat-Android/pull/23)، دون تغيير SQL أو كود الإنتاج أو الاختبارات.
 
-## نطاق الأدلة المؤكدة وحدودها
+This register documents the existing fixture files after PR #23. It does not change SQL, production code or test behavior, close Issue #17, or certify M1 completion.
 
-- الإصدار الحالي لـ `almishkat_quran.db` هو **10**؛ [شيفرة `develop`](https://github.com/mothmane977-cmd/Almishkat-Android/blob/develop/app/src/main/java/com/almishkat/studio/QuranLocalDatabase.kt) عند Git **blob SHA** `497c62c571d54cd0ed1dbe8a7ca074473c63bd20`. هذا ليس إثباتاً لشكل كل مخطط قديم.
-- الملفات العشرة متاحة الآن في [PR #18](https://github.com/mothmane977-cmd/Almishkat-Android/pull/18) بمسار `app/src/androidTest/assets/db/` المعتمد للتكافؤ الوظيفي وفق ADM-M1-039؛ **لم تُدمج في `develop`**.
-- `v1`–`v9` **RECONSTRUCTED** من شيفرة v10 ووثائق تطور المنتج الوصفية؛ **لا يوجد أصل SQLite تاريخي موثَّق ولا commit أصلي مُثبت لتعريف DDL** لهذه الإصدارات. `v10` **DERIVED FROM CURRENT onCreate**، وليس نسخة قاعدة من جهاز مستخدم.
-- بصمات العمود الثالث هي **Git blob SHA-1 لملفات الاختبار الموجودة**؛ **ليست** SHA للإصدارات القديمة الأصلية، ولا SHA-256 للأرشيفات. المصادر المقتبسة مستندات ثانوية؛ بعض تفاصيل ترتيب الأعمدة والقيود والفهارس **مفترضة** وتحتاج اختباراً بمخططات أصلية عند توفرها.
-- جميع الأمثلة المزروعة بيانات اصطناعية `TEST_ONLY_*`، وليست نصوصاً قرآنية موثقة أو توقيتات تلاوات أصلية. لا اختبار هنا لقواعد مستخدمين فعليين.
+## المصدر الثابت | Pinned source
 
-## جدول النسخ والمرجع
+- أساس هذا الجرد / Inventory baseline: `develop` at `6fc5cbd8f3406db28b120b8821b664212920d60d`.
+- مسار الملفات الحالي / Current path: `app/src/test/resources/db/vN.sql`.
+- مصدر ملفات الاختبار المنسوخة / Copied test-fixture source: [PR #18 commit `5ffb077c02d66dcf7388218f8902a890856cd390`](https://github.com/mothmane977-cmd/Almishkat-Android/tree/5ffb077c02d66dcf7388218f8902a890856cd390/app/src/androidTest/assets/db). All ten files are byte-identical to that source; PR #18 itself remains unmerged.
+- مرجع مخطط v10 / v10 structural reference: baseline `QuranLocalDatabase.kt` Git blob `497c62c571d54cd0ed1dbe8a7ca074473c63bd20` at commit `22dac68190250f093bcca044509fbfa1e32a8327`.
 
-| SQLite version | Fixture على فرع الاختبارات | Git blob SHA-1 (test file) | سند إعادة البناء، لا DDL أصلي | الحالة | `PRAGMA user_version` |
-| --- | --- | --- | --- | --- | --- |
-| v1 | [v1.sql](https://github.com/mothmane977-cmd/Almishkat-Android/blob/test/M1-TST-01-historical-schema-audit/app/src/androidTest/assets/db/v1.sql) | `93bc560cca6e091ce9263c137caf0bc5d60fbdeb` | [docs/QURAN_DATABASE_V5_AR.md](https://github.com/mothmane977-cmd/Almishkat-Android/blob/develop/docs/QURAN_DATABASE_V5_AR.md) — v1 Quran tables and source manifest | RECONSTRUCTED | 1 |
-| v2 | [v2.sql](https://github.com/mothmane977-cmd/Almishkat-Android/blob/test/M1-TST-01-historical-schema-audit/app/src/androidTest/assets/db/v2.sql) | `b85097208ed0d24a69b55c02afb16912f0a23427` | [docs/PROJECT_V7_LOCAL_TIMING_AR.md](https://github.com/mothmane977-cmd/Almishkat-Android/blob/develop/docs/PROJECT_V7_LOCAL_TIMING_AR.md) — v1→v2 ayah_timings | RECONSTRUCTED | 2 |
-| v3 | [v3.sql](https://github.com/mothmane977-cmd/Almishkat-Android/blob/test/M1-TST-01-historical-schema-audit/app/src/androidTest/assets/db/v3.sql) | `9ad8e237290da0005ce7985273fffb8867eb5dba` | [docs/PROJECT_V8_PROJECTS_AR.md](https://github.com/mothmane977-cmd/Almishkat-Android/blob/develop/docs/PROJECT_V8_PROJECTS_AR.md) — v2→v3 studio_projects | RECONSTRUCTED | 3 |
-| v4 | [v4.sql](https://github.com/mothmane977-cmd/Almishkat-Android/blob/test/M1-TST-01-historical-schema-audit/app/src/androidTest/assets/db/v4.sql) | `5e03abcd282b24753f878238296b7113d298e48e` | [docs/PROJECT_V12_PERSISTED_CLIPS_AR.md](https://github.com/mothmane977-cmd/Almishkat-Android/blob/develop/docs/PROJECT_V12_PERSISTED_CLIPS_AR.md) — v3→v4 audio_clip_selections | RECONSTRUCTED | 4 |
-| v5 | [v5.sql](https://github.com/mothmane977-cmd/Almishkat-Android/blob/test/M1-TST-01-historical-schema-audit/app/src/androidTest/assets/db/v5.sql) | `7163c3b95e169a178fee777e12d2aa86d75ddf5b` | [docs/PROJECT_V13_AYAH_LINKING_AR.md](https://github.com/mothmane977-cmd/Almishkat-Android/blob/develop/docs/PROJECT_V13_AYAH_LINKING_AR.md) — v4→v5 audio clip link columns | RECONSTRUCTED | 5 |
-| v6 | [v6.sql](https://github.com/mothmane977-cmd/Almishkat-Android/blob/test/M1-TST-01-historical-schema-audit/app/src/androidTest/assets/db/v6.sql) | `ff50c97a27cb52411c171acb9fedb18277a09f9a` | [docs/PROJECT_V16_SCENE_LAYERS_AR.md](https://github.com/mothmane977-cmd/Almishkat-Android/blob/develop/docs/PROJECT_V16_SCENE_LAYERS_AR.md) — v5→v6 scene_layers | RECONSTRUCTED | 6 |
-| v7 | [v7.sql](https://github.com/mothmane977-cmd/Almishkat-Android/blob/test/M1-TST-01-historical-schema-audit/app/src/androidTest/assets/db/v7.sql) | `bf9efcd23b3f9db5cd643ed022887e277d0509af` | [docs/PROJECT_V18_BACKGROUNDS_AR.md](https://github.com/mothmane977-cmd/Almishkat-Android/blob/develop/docs/PROJECT_V18_BACKGROUNDS_AR.md) — v6→v7 scene_backgrounds | RECONSTRUCTED | 7 |
-| v8 | [v8.sql](https://github.com/mothmane977-cmd/Almishkat-Android/blob/test/M1-TST-01-historical-schema-audit/app/src/androidTest/assets/db/v8.sql) | `4b1096ac5e538a84e41ae3f5d3192a27baa2ad08` | [docs/PROJECT_V19_MOTION_BACKGROUNDS_AR.md](https://github.com/mothmane977-cmd/Almishkat-Android/blob/develop/docs/PROJECT_V19_MOTION_BACKGROUNDS_AR.md) — v7→v8 video_uri | RECONSTRUCTED | 8 |
-| v9 | [v9.sql](https://github.com/mothmane977-cmd/Almishkat-Android/blob/test/M1-TST-01-historical-schema-audit/app/src/androidTest/assets/db/v9.sql) | `5bd2ea4898f583585d8cc1d4bee464add2560820` | [docs/PROJECT_V21_SCENE_MANAGER_AR.md](https://github.com/mothmane977-cmd/Almishkat-Android/blob/develop/docs/PROJECT_V21_SCENE_MANAGER_AR.md) — v8→v9 studio_scenes | RECONSTRUCTED | 9 |
-| v10 | [v10.sql](https://github.com/mothmane977-cmd/Almishkat-Android/blob/test/M1-TST-01-historical-schema-audit/app/src/androidTest/assets/db/v10.sql) | `b58dd442899c2ad1be27b2a2c65d3afb21444189` | [current SQLiteOpenHelper](https://github.com/mothmane977-cmd/Almishkat-Android/blob/develop/app/src/main/java/com/almishkat/studio/QuranLocalDatabase.kt) — current SQLiteOpenHelper v10 onCreate, not legacy dump | DERIVED FROM CURRENT | 10 |
+هذه معرفات مصدر ملفات الاختبار، وليست معرفات إصدارات SQLite التاريخية الأصلية. لم يُسترجع commit أصلي موثَّق أو نسخة جهاز أصلية لـv1–v9. v10 مشتق من `onCreate` في الكود السابق؛ الإصدار الحالي للتطبيق بعد الإصلاح هو SQLite **11**، وتبقى ملفات الاختبار مجمدة عند إصدارات الإدخال v1–v10.
 
-**المصدر البنيوي الإضافي:** نسخ v1–v9 اللاحقة تستلزم ما قبلها؛ الوثائق أعلاه وصف لتاريخ المزايا، لا أرشيف `sqlite_master` أصلي لكل إصدار. قائمة [أرشيفات المصدر](https://github.com/mothmane977-cmd/Almishkat-Android/tree/develop/archive/source-snapshots) قد تُستخدم للبحث عن أصول تاريخية؛ اسم ملف ZIP أو رقم إصدار التطبيق لا يثبت رقم SQLite. لم يُثبت هنا استرجاع DDL قديم منها.
+These identifiers establish fixture-file provenance, not authentic historical database provenance. No original historical DDL commit or device database for v1–v9 has been recovered. v10 derives from the former `onCreate`, not a device dump. The current helper targets SQLite **11**; fixtures intentionally retain their v1–v10 input versions.
 
-## إثبات الاختبارات المتاح (ليس قبول M1-TST-01)
+## الملفات والبصمات | Files and hashes
 
-- [مصفوفة `V1V10SchemaMatrixTest`](https://github.com/mothmane977-cmd/Almishkat-Android/blob/feature/M1-TST-01-unified-ADM-M1-037/app/src/androidTest/java/com/almishkat/studio/V1V10SchemaMatrixTest.kt) تتحقق من `PRAGMA user_version` لكل fixture، وترقيات `v1`–`v10`، وحفظ القيم وإعادة الفتح و`integrity_check`، مع مقارنة بنيوية ولقطات فروق DDL الخام.
-- [GitHub Actions Run 43019335006](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/43019335006) حقق **12/12 PASS** لمصفوفة Android على **API 26 وAPI 36** على **فرع تكامل تجريبي يجمع إصلاح D01 وإصلاح المشاهد**. لا تنسب هذه النتائج إلى [PR #19](https://github.com/mothmane977-cmd/Almishkat-Android/pull/19) المنعزل، لأن ترقية الإصدارات القديمة فيه ما زالت تفتقد `studio_scenes`.
-- الاختبارات البنيوية تتجاهل اختلاف **ترتيب الأعمدة الفيزيائي** عندما لا تتغير السمات، وتحتفظ بـDDL الخام؛ لا تثبت تكافؤ كل `CHECK` و`COLLATE` وtriggers وexpression indexes. لا يجوز توسيع ادعاء القبول دون تدقيق إضافي.
-- [Historical RED Run 42994536983](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/42994536983) يثبت فشل D01 القديم المتوقع على الشيفرة القديمة. نجاح إثبات RED ليس نجاح ترقية إنتاج.
+البصمات أدناه **Git blob SHA-1 لملفات الاختبار**، وليست SHA-256 لقاعدة مستخدم أو لأرشيف قديم. `user_version` هو إصدار الإدخال المكتوب داخل كل ملف.
 
-## حزمة اختبار التحميل المحدودة — PR #18، دون تعديل الإنتاج
+The following values are **Git blob SHA-1 hashes of test fixtures**, not historical database or archive SHA-256 hashes. Each `user_version` is declared by the fixture itself.
 
-- [FixtureLoaderVersionTest](../../app/src/androidTest/java/com/almishkat/studio/FixtureLoaderVersionTest.kt): **10 اختبارات مستقلة** للتحميل و`user_version` و`integrity_check` و`foreign_key_check` وإعادة الفتح لكل v1..v10.
-- لا تشمل حزمة PR #18 `V1V10SchemaMatrixTest` أو `D01HistoricalRedEvidenceTest` أو `StudioScenesHistoricalRedTest` أو `StructuralSchema` أو Workflow تجريبيًا؛ هذه الأدلة على فروع منفصلة ولا تُنسب إلى هذا PR.
-- `testInstrumentationRunner` واعتماديات `androidTestImplementation` هي تغييرات Gradle الاختبارية الوحيدة. فحص التحميل لا يثبت ترقية v1–v10.
+| الملف / File | `user_version` | Git blob SHA-1 | مصدر المخطط / Schema status |
+| --- | ---: | --- | --- |
+| [v1.sql](../../app/src/test/resources/db/v1.sql) | 1 | `93bc560cca6e091ce9263c137caf0bc5d60fbdeb` | RECONSTRUCTED |
+| [v2.sql](../../app/src/test/resources/db/v2.sql) | 2 | `b85097208ed0d24a69b55c02afb16912f0a23427` | RECONSTRUCTED |
+| [v3.sql](../../app/src/test/resources/db/v3.sql) | 3 | `9ad8e237290da0005ce7985273fffb8867eb5dba` | RECONSTRUCTED |
+| [v4.sql](../../app/src/test/resources/db/v4.sql) | 4 | `5e03abcd282b24753f878238296b7113d298e48e` | RECONSTRUCTED |
+| [v5.sql](../../app/src/test/resources/db/v5.sql) | 5 | `7163c3b95e169a178fee777e12d2aa86d75ddf5b` | RECONSTRUCTED |
+| [v6.sql](../../app/src/test/resources/db/v6.sql) | 6 | `ff50c97a27cb52411c171acb9fedb18277a09f9a` | RECONSTRUCTED |
+| [v7.sql](../../app/src/test/resources/db/v7.sql) | 7 | `bf9efcd23b3f9db5cd643ed022887e277d0509af` | RECONSTRUCTED |
+| [v8.sql](../../app/src/test/resources/db/v8.sql) | 8 | `4b1096ac5e538a84e41ae3f5d3192a27baa2ad08` | RECONSTRUCTED |
+| [v9.sql](../../app/src/test/resources/db/v9.sql) | 9 | `5bd2ea4898f583585d8cc1d4bee464add2560820` | RECONSTRUCTED |
+| [v10.sql](../../app/src/test/resources/db/v10.sql) | 10 | `b58dd442899c2ad1be27b2a2c65d3afb21444189` | DERIVED FROM CURRENT onCreate |
 
-## شروط القبول وموانعه
+تفاصيل المصادر الثانوية والافتراضات محفوظة داخل ملفات SQL؛ تشمل وثائق تطور جداول القرآن والتوقيتات والمشاريع والمقاطع والطبقات والخلفيات والمشاهد. الأسماء والإصدارات الوصفية لا تثبت DDL تاريخيًا أصليًا. كل القيم المزروعة في الاختبارات اصطناعية `TEST_ONLY`، وليست نصوصًا قرآنية أو توقيتات موثقة.
 
-1. اعتماد فني مستقل لوسوم ومصادر Fixtures والـLoader وفق ADM-M1-055؛ موافقة المالك ADM-M1-060 على توسيع PR #18 لا تساوي إذن دمج.
-2. فحص JUnit لـFixtureLoaderVersionTest على API 26 وAPI 36 **على رأس PR #18 بعد التحديث**؛ واختبار Clean Clone Verification and APK Build على الرأس نفسه. سجلات الفروع التجريبية السابقة ليست بديلاً.
-3. تستمر التبعيات: M1-CI-01 وRequired db-tests والترحيلات الكاملة والتحقق من البنية وسلامة بيانات المستخدمين في مهام مستقلة. لا تُغلق Issue #17 حتى قبول الإدارة الصريح.
+Secondary-document references and reconstruction assumptions remain in the unchanged SQL headers. Product-version names and descriptive documents do not authenticate historical DDL. Seeded records are synthetic `TEST_ONLY` values, not authenticated Quran text or recitation timings.
 
-**الحالة:** FIXTURES/LOADER IN PR #18 — RECONSTRUCTED PROVENANCE — PENDING CURRENT-HEAD CI AND ADMIN ACCEPTANCE.
+## طريقة التحقق | Verification method
+
+- يحمّل [العقد المشترك](../../app/src/sharedTest/java/com/almishkat/studio/DatabaseRegressionContract.kt) كل إصدار ويفحص `db.version` قبل الترقية، ثم حفظ القيم والبنية وإعادة الفتح وسلامة SQLite. تتشارك اختبارات JVM وAndroid ملفات SQL نفسها.
+- أُثبتت نتائج الاختبارات السابقة في [سجل الأدلة](M1_REPAIR_EVIDENCE.md): 38/38 لكل من Debug وRelease محليًا؛ و19/19 على كل من محاكيَي API 26 و36 عند SHA `16be26b27d19b36d0cc2fe836933857a9afbc1a6`.
+- هذه أدلة موجودة قبل إضافة السجل، وليست تشغيلًا جديدًا منسوبًا إلى تغيير التوثيق. فحص البناء الإلزامي لطلب هذا التغيير يُراجع منفصلًا على رأسه النهائي.
+
+The shared test contract loads every input version and checks `db.version`, preservation, column/index metadata, repeat opens and SQLite integrity. JVM and Android runners consume the same SQL files. The linked evidence records prior 38/38 Debug and Release results and 19/19 per API26/API36 emulator at the pinned SHA. Those are existing results, not new executions claimed for this documentation change. Required CI for this PR must be verified on its own final head.
+
+لإعادة التحقق بعد تثبيت متطلبات البناء الموثقة / Reproduce with the documented build prerequisites:
+
+```sh
+git hash-object app/src/test/resources/db/v1.sql
+gradle --no-daemon --stacktrace :app:testDebugUnitTest
+gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.almishkat.studio.DatabaseInstrumentedRegressionTest
+```
+
+الأمر الأخير يحتاج جهازًا أو محاكيًا جاهزًا، وهو ليس ادعاء تشغيله في هذه الجولة التوثيقية. / The last command requires a ready device or emulator; listing it does not claim a new device execution in this documentation round.
+
+## حدود قبول المهمة | Acceptance limits
+
+- يسمح نص Issue #17 بالمخططات المعاد بناؤها عند تعذر استرجاع الأصل بشرط وسمها وتسجيل مصدرها؛ يبقى توافق قواعد المستخدمين التاريخية غير مثبت بهذا البديل وحده.
+- يملأ هذا الملف مسار سجل المصادر المطلوب فقط. وجوده لا يغني عن بقية شروط #17، ومنها بوابة `db-tests` الإلزامية وقبول أدلة الترحيل.
+- لا يفترض هذا السجل تطابق معرّفات D1–D15 مع DB-001–DB-015، ولا يُنشئ جدول اختبارات بديلًا. مطابقة نطاق M1 الكامل مع `ROADMAP.md` مستقلة عن توثيق مصادر ملفات #17.
+
+Issue #17 permits explicitly labelled reconstructions when originals cannot be recovered; this does not establish compatibility with authentic historical user databases. This file fills the required provenance-register path only. The remaining issue criteria, including the required `db-tests` gate and acceptance of migration evidence, remain separate. D1–D15 are not assumed equivalent to DB-001–DB-015, and no alternative test table is introduced. Full M1 conformance to the owner's `ROADMAP.md` remains separate from this fixture register.
+
+## ADM-M1-076 — حفظ أدلة PR #18 أثناء تسوية التعارض (2026-11-12)
+
+- تم الحفاظ على سجل `develop` بما فيه مصادر PR #23/#24 وإصدار قاعدة SQLite **11** الحالي، دون استبداله بسجل PR #18 الأقدم الذي أشار إلى الإصدار 10.
+- أُبقيت ملفات `app/src/test/resources/db/v1.sql` إلى `v10.sql` كما في `develop`، وتُضاف ملفات `app/src/androidTest/assets/db/v1.sql` إلى `v10.sql` **دون تغيير بايت واحد** من PR #18. تكافؤ اختيار المسار `androidTest/assets/db` معتمد وفق **ADM-M1-039**، ولا يُعاد فتح القرار.
+- `v1` إلى `v9`: **RECONSTRUCTED**، دون DDL تاريخي موثق؛ `v10`: **DERIVED FROM CURRENT onCreate** للنسخة السابقة v10، وليس من نسخة مستخدم أصلية. لا يُستنتج نجاح الترحيل أو حماية قواعد مستخدمين من نجاح Loader.
+- مصدر ملفات `androidTest/assets` المعتمد: [PR #18 HEAD قبل تسوية التعارض](https://github.com/mothmane977-cmd/Almishkat-Android/tree/5ffb077c02d66dcf7388218f8902a890856cd390/app/src/androidTest/assets/db)؛ Git blob SHA-1 لكل إصدار يطابق القيم المسجلة في الجدول أعلاه ومطابقة النسخ في `test/resources`؛ هذه ليست بصمات لقواعد تاريخية أصلية.
+- يبقى اختبار `FixtureLoaderVersionTest.kt` بــ Git blob `474ce2ecb86ec4c11e20c4e26ea8499636798e3b` على المسار `app/src/androidTest/java/com/almishkat/studio/`؛ لا يثبت سوى التحميل و`PRAGMA user_version` وسلامة SQLite وإعادة فتح الملفات الاختبارية.
+- `app/build.gradle.kts`: أُبقيت **نسخة develop الحالية** بما فيها `testOptions` و`sourceSets` وJUnit/Robolectric و`androidTestImplementation` و`testInstrumentationRunner`؛ لا تضيع إضافات أي طرف، ولا يتغير إصدار التطبيق أو كود الإنتاج.
+
+### مستندات إعادة بناء المخططات (مراجع وصفية ثانوية، ليست DDL أصليًا)
+
+| Version | Evidence / reconstruction basis |
+| --- | --- |
+| v1 | docs/QURAN_DATABASE_V5_AR.md — Quran tables / source manifest |
+| v2 | docs/PROJECT_V7_LOCAL_TIMING_AR.md — ayah_timings |
+| v3 | docs/PROJECT_V8_PROJECTS_AR.md — studio_projects |
+| v4 | docs/PROJECT_V12_PERSISTED_CLIPS_AR.md — audio_clip_selections |
+| v5 | docs/PROJECT_V13_AYAH_LINKING_AR.md — clip links |
+| v6 | docs/PROJECT_V16_SCENE_LAYERS_AR.md — scene_layers |
+| v7 | docs/PROJECT_V18_BACKGROUNDS_AR.md — scene_backgrounds |
+| v8 | docs/PROJECT_V19_MOTION_BACKGROUNDS_AR.md — video_uri |
+| v9 | docs/PROJECT_V21_SCENE_MANAGER_AR.md — studio_scenes |
+| v10 | QuranLocalDatabase.kt at original v10 onCreate, Git blob 497c62c571d54cd0ed1dbe8a7ca074473c63bd20 |
+
+أدلة PR #18 السابقة: [Loader API26/API36 — 10/10 PASS لكل منهما](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/43113429423) على HEAD قديم `9b91f8822722d78b06d5cee0f25ea156d221a780`؛ [Clean Clone Build](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/43114465319) على `5ffb077c02d66dcf7388218f8902a890856cd390`. هذه **ليست** أدلة اختبار HEAD الجديد بعد التسوية؛ يلزم تشغيل جديد عليه.
+
+**حدود القرار:** لا يثبت هذا الدمج على الفرع الاختباري قبول ترقية v1–v10، ولا يجيز دمج PR #18 في develop أو إغلاق Issue #17. يبقى إجراء CI وبوابة Required Check في M1-CI-01 فقط.

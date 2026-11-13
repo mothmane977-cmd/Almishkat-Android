@@ -87,7 +87,7 @@ jobs:
           PY
           grep -qx 'GRADLE_EXIT=0' <(grep '^GRADLE_EXIT=' m1-ci-01-evidence/context.txt)
       - name: Safe isolated fail-closed check (workflow_dispatch only)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.controlled_failure == true }}
+        if: ${{ github.event_name == 'pull_request' }}
         shell: bash
         run: |
           echo '::error::Controlled failure for ADM-M1-106 — must not be counted as a passing PR gate'

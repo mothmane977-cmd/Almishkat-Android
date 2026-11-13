@@ -70,7 +70,7 @@ jobs:
           # Evidence XML from ADM-M1-106: 19 names with [26], 19 without suffix.
           # Untagged does NOT independently identify a particular Android SDK.
           required = {
-              'ADM_M1_110_REQUIRED_COVERAGE_TEST_ABSENT',
+              'reconstructedV1UpgradePreservesData',
               'reconstructedV2UpgradePreservesData',
               'reconstructedV3UpgradePreservesData',
               'reconstructedV4UpgradePreservesAudio',

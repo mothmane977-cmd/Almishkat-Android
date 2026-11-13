@@ -1,0 +1,150 @@
+# ADM-M1-106 — M1-CI-01 minimal gate based on already merged SQLite regression tests.
+# Robolectric native SQLite; Android API26/36 instrumented fidelity is separately pinned in M1_REPAIR_EVIDENCE.md.
+# Never include the historical intentionally failing RED tests in the acceptance job.
+name: db-tests
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+  workflow_dispatch:
+    inputs:
+      controlled_failure:
+        description: "Only for isolated fail-closed verification (never for acceptance)"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m1-db-tests-${{ github.event.pull_request.number || github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  db-tests:
+    name: db-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR-tested revision
+        uses: actions/checkout@v4
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Verify merged regression prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s app/src/test/java/com/almishkat/studio/DatabaseRegressionTest.kt
+          test -s app/src/sharedTest/java/com/almishkat/studio/DatabaseRegressionContract.kt
+          test -s app/src/main/java/com/almishkat/studio/QuranLocalDatabase.kt
+          for version in {1..10}; do test -s "app/src/test/resources/db/v${version}.sql"; done
+      - name: Run native SQLite migrations and regression tests
+        id: test
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p m1-ci-01-evidence
+          date -u +%FT%TZ > m1-ci-01-evidence/start-utc.txt
+          printf 'GITHUB_SHA=%s\nGITHUB_REF=%s\n' "$GITHUB_SHA" "$GITHUB_REF" > m1-ci-01-evidence/context.txt
+          gradle --no-daemon --stacktrace :app:testDebugUnitTest 2>&1 | tee m1-ci-01-evidence/gradle.log
+          code=${PIPESTATUS[0]}
+          date -u +%FT%TZ > m1-ci-01-evidence/end-utc.txt
+          echo "GRADLE_EXIT=${code}" | tee -a m1-ci-01-evidence/context.txt
+          exit "$code"
+      - name: Fail closed on missing or unsuccessful JUnit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import collections,glob,json,sys,xml.etree.ElementTree as ET
+          from pathlib import Path
+          # Evidence XML from ADM-M1-106: 19 names with [26], 19 without suffix.
+          # Untagged does NOT independently identify a particular Android SDK.
+          required = {
+              'reconstructedV1UpgradePreservesData',
+              'reconstructedV2UpgradePreservesData',
+              'reconstructedV3UpgradePreservesData',
+              'reconstructedV4UpgradePreservesAudio',
+              'reconstructedV5UpgradePreservesAudioLinks',
+              'reconstructedV6UpgradePreservesLayers',
+              'reconstructedV7UpgradePreservesImageBackground',
+              'reconstructedV8UpgradePreservesVideoBackground',
+              'reconstructedV9UpgradePreservesScenes',
+              'installedV10MissingScenesIsRepaired',
+              'installedV10ExistingScenesArePreserved',
+              'repeatedGlobalBackgroundSaveUpdatesOneRowAndSurvivesReopen',
+              'backgroundSaveIsIsolatedByProjectAndScene',
+              'legacyDuplicateBackgroundReadUsesNewestTimestamp',
+              'legacyDuplicateTimestampTieUsesLastInsertedRow',
+              'savingLegacyDuplicatesDoesNotGrowOrOverwriteHistory',
+              'saveWithFutureLegacyTimestampsRemainsLatest',
+              'backgroundUpdateCanClearMediaAndChangeOptions',
+              'failedBackgroundUpdateRollsBackAndReleasesTransaction',
+          }
+          klass='com.almishkat.studio.DatabaseRegressionTest'
+          paths=sorted(glob.glob('app/build/test-results/testDebugUnitTest/TEST-*.xml'))
+          failures=[]
+          seen=collections.Counter()
+          all_cases=0
+          for path in paths:
+              try:
+                  root=ET.parse(path).getroot()
+              except (ET.ParseError,OSError) as exc:
+                  failures.append(f'Invalid or unreadable JUnit XML {path}: {exc}')
+                  continue
+              for case in root.iter('testcase'):
+                  all_cases+=1
+                  name=case.get('name') or ''
+                  cls=case.get('classname') or ''
+                  if not name or not cls:
+                      failures.append(f'Missing testcase identity in {path}')
+                  if case.find('failure') is not None or case.find('error') is not None or case.find('skipped') is not None:
+                      failures.append(f'FAIL/ERROR/SKIP in {cls}.{name}')
+                  if cls==klass:
+                      seen[name]+=1
+          expected={test+suffix for test in required for suffix in ('[26]','')}
+          missing=sorted(expected-set(seen))
+          duplicates=sorted(name for name,count in seen.items() if count>1)
+          unexpected=sorted(name for name in seen if name not in expected)
+          # Additional tests are allowed; the exact 38 established variants remain mandatory.
+          if not paths: failures.append('JUnit XML not found')
+          if all_cases<38: failures.append(f'Insufficient cases: {all_cases}<38')
+          if len(seen)<38: failures.append(f'Insufficient distinct DB cases: {len(seen)}<38')
+          if missing: failures.append(f'Missing mandatory DB case variants: {missing}')
+          if duplicates: failures.append(f'Duplicate DB testcase identities: {duplicates}')
+          if not Path('m1-ci-01-evidence/context.txt').is_file() or 'GRADLE_EXIT=0' not in Path('m1-ci-01-evidence/context.txt').read_text().splitlines():
+              failures.append('Missing or nonzero Gradle exit')
+          summary=dict(xml_files=paths,total_cases=all_cases,expected_class=klass,mandatory_variants=len(expected),
+                       observed_distinct_db_cases=len(seen),missing=missing,duplicates=duplicates,
+                       extra_db_cases=unexpected,failures=failures)
+          with open('m1-ci-01-evidence/junit-summary.json','w') as f: json.dump(summary,f,sort_keys=True,indent=2)
+          print(json.dumps(summary,sort_keys=True))
+          if failures: sys.exit('db-tests FAIL CLOSED: coverage or test integrity violation')
+          PY
+          grep -qx 'GRADLE_EXIT=0' <(grep '^GRADLE_EXIT=' m1-ci-01-evidence/context.txt)
+      - name: Safe isolated fail-closed check (workflow_dispatch only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.controlled_failure == true }}
+        shell: bash
+        run: |
+          echo '::error::Controlled failure for ADM-M1-106 — must not be counted as a passing PR gate'
+          exit 17
+      - name: Always publish JUnit XML and Gradle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m1-ci-01-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: |
+            m1-ci-01-evidence/**
+            app/build/test-results/testDebugUnitTest/**
+            app/build/reports/tests/testDebugUnitTest/**
+          if-no-files-found: warn
+          retention-days: 14

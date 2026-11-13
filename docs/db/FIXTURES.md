@@ -63,3 +63,31 @@ gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest -Pandroid.testIns
 - لا يفترض هذا السجل تطابق معرّفات D1–D15 مع DB-001–DB-015، ولا يُنشئ جدول اختبارات بديلًا. مطابقة نطاق M1 الكامل مع `ROADMAP.md` مستقلة عن توثيق مصادر ملفات #17.
 
 Issue #17 permits explicitly labelled reconstructions when originals cannot be recovered; this does not establish compatibility with authentic historical user databases. This file fills the required provenance-register path only. The remaining issue criteria, including the required `db-tests` gate and acceptance of migration evidence, remain separate. D1–D15 are not assumed equivalent to DB-001–DB-015, and no alternative test table is introduced. Full M1 conformance to the owner's `ROADMAP.md` remains separate from this fixture register.
+
+## ADM-M1-076 — حفظ أدلة PR #18 أثناء تسوية التعارض (2026-11-12)
+
+- تم الحفاظ على سجل `develop` بما فيه مصادر PR #23/#24 وإصدار قاعدة SQLite **11** الحالي، دون استبداله بسجل PR #18 الأقدم الذي أشار إلى الإصدار 10.
+- أُبقيت ملفات `app/src/test/resources/db/v1.sql` إلى `v10.sql` كما في `develop`، وتُضاف ملفات `app/src/androidTest/assets/db/v1.sql` إلى `v10.sql` **دون تغيير بايت واحد** من PR #18. تكافؤ اختيار المسار `androidTest/assets/db` معتمد وفق **ADM-M1-039**، ولا يُعاد فتح القرار.
+- `v1` إلى `v9`: **RECONSTRUCTED**، دون DDL تاريخي موثق؛ `v10`: **DERIVED FROM CURRENT onCreate** للنسخة السابقة v10، وليس من نسخة مستخدم أصلية. لا يُستنتج نجاح الترحيل أو حماية قواعد مستخدمين من نجاح Loader.
+- مصدر ملفات `androidTest/assets` المعتمد: [PR #18 HEAD قبل تسوية التعارض](https://github.com/mothmane977-cmd/Almishkat-Android/tree/5ffb077c02d66dcf7388218f8902a890856cd390/app/src/androidTest/assets/db)؛ Git blob SHA-1 لكل إصدار يطابق القيم المسجلة في الجدول أعلاه ومطابقة النسخ في `test/resources`؛ هذه ليست بصمات لقواعد تاريخية أصلية.
+- يبقى اختبار `FixtureLoaderVersionTest.kt` بــ Git blob `474ce2ecb86ec4c11e20c4e26ea8499636798e3b` على المسار `app/src/androidTest/java/com/almishkat/studio/`؛ لا يثبت سوى التحميل و`PRAGMA user_version` وسلامة SQLite وإعادة فتح الملفات الاختبارية.
+- `app/build.gradle.kts`: أُبقيت إعدادات `testOptions` و`sourceSets` (شيفرة `sharedTest`) وJUnit/Robolectric و`androidTestImplementation` و`testInstrumentationRunner` من `develop`. أُلغي **تسجيل `src/test/resources` كمصدر assets إضافي لـAndroidTest فقط** بعد أن أثبت فحص [Actions 43225606760](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/43225606760) تعارض `Duplicate resources` في `:app:mergeDebugAndroidTestAssets` بين نسختي ملفات SQL المتطابقتين. بقيت ملفات SQL في كلا المسارين بأصولها وبصماتها دون حذف؛ يستخدم Android ملفات `androidTest/assets/db` المعتمدة في ADM-M1-039، وتستخدم اختبارات JVM ملفات `test/resources/db`. لا يُعد إصلاح التعارض قبولًا للاختبارات دون تشغيل جديد.
+
+### مستندات إعادة بناء المخططات (مراجع وصفية ثانوية، ليست DDL أصليًا)
+
+| Version | Evidence / reconstruction basis |
+| --- | --- |
+| v1 | docs/QURAN_DATABASE_V5_AR.md — Quran tables / source manifest |
+| v2 | docs/PROJECT_V7_LOCAL_TIMING_AR.md — ayah_timings |
+| v3 | docs/PROJECT_V8_PROJECTS_AR.md — studio_projects |
+| v4 | docs/PROJECT_V12_PERSISTED_CLIPS_AR.md — audio_clip_selections |
+| v5 | docs/PROJECT_V13_AYAH_LINKING_AR.md — clip links |
+| v6 | docs/PROJECT_V16_SCENE_LAYERS_AR.md — scene_layers |
+| v7 | docs/PROJECT_V18_BACKGROUNDS_AR.md — scene_backgrounds |
+| v8 | docs/PROJECT_V19_MOTION_BACKGROUNDS_AR.md — video_uri |
+| v9 | docs/PROJECT_V21_SCENE_MANAGER_AR.md — studio_scenes |
+| v10 | QuranLocalDatabase.kt at original v10 onCreate, Git blob 497c62c571d54cd0ed1dbe8a7ca074473c63bd20 |
+
+أدلة PR #18 السابقة: [Loader API26/API36 — 10/10 PASS لكل منهما](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/43113429423) على HEAD قديم `9b91f8822722d78b06d5cee0f25ea156d221a780`؛ [Clean Clone Build](https://github.com/mothmane977-cmd/Almishkat-Android/actions/runs/43114465319) على `5ffb077c02d66dcf7388218f8902a890856cd390`. هذه **ليست** أدلة اختبار HEAD الجديد بعد التسوية؛ يلزم تشغيل جديد عليه.
+
+**حدود القرار:** لا يثبت هذا الدمج على الفرع الاختباري قبول ترقية v1–v10، ولا يجيز دمج PR #18 في develop أو إغلاق Issue #17. يبقى إجراء CI وبوابة Required Check في M1-CI-01 فقط.

@@ -1,0 +1,1 @@
+This directory exists for Clean Clone structure checks. Historical ZIP snapshots are preserved unchanged at the repository root of main. This note does not relocate, duplicate, license, or replace those archives. The native Android source under app/ is the proposed build source, subject to successful CI and owner approval.
